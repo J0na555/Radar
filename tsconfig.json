@@ -4,6 +4,7 @@
     "target": "ES2018",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "lib": ["DOM", "ES2018", "ES2020.Promise"],
     "types": ["node"],
     "strict": true,

@@ -21,14 +21,25 @@ It then ranks projects in two layers that never blend:
 
 | Signal | Points |
 | --- | --- |
-| has uncommitted changes | +40 |
+| has uncommitted changes | up to +40, on a log2 curve capped at 32 files |
 | on a non-default branch | +25 |
 | last commit within 7 days | +30 decaying to 0 |
 | last commit 8 to 30 days | +15 decaying to 0 |
 | directory touched within 2 days | +10 |
 
-No activity for 30 days marks a project dormant. Dormant projects are hidden
-unless pinned, or unless you turn on "Show dormant projects".
+Uncommitted changes are not a flat +40. The points follow
+`round(40 * log2(1 + files) / log2(1 + 32))`, so 1 changed file is 8, 4 is 18, 12
+is 29, and 32 or more is the full 40. A flat weight gave 1 changed file the same
+40 as 144, which left the top of the ranking separated by nothing but alphabetical
+order.
+
+A project is dormant only when it has no live work and no recent commit. Live work
+means uncommitted changes or a non-default branch, either of which keeps a project
+active on its own no matter how old its last commit is, so unshipped work is never
+hidden. A project with no live work whose last commit is older than 30 days is
+dormant, as is a repo with no commits whose directory has not been touched in 30
+days. Dormant projects are hidden unless pinned, or unless you turn on "Show
+dormant projects".
 
 There is no LLM in the ranking. The score is arithmetic over git facts, so it is
 free, offline, and explainable.
@@ -67,6 +78,7 @@ Keeping the folder under `private/` means your Quartz config's
 pnpm install
 pnpm dev      # watch build
 pnpm build    # typecheck + production bundle to main.js
+pnpm test     # node --test, runs src/rank.test.ts
 ```
 
 Deploy by copying `main.js`, `manifest.json`, and `styles.css` into

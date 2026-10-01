@@ -3,9 +3,14 @@ import * as path from "path";
 import { App, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
 import { scanProjects } from "./git";
 import { scoreRepo } from "./rank";
+import { StartupLog } from "./startup-log";
 import { PluginSettings, Project, RepoFacts } from "./types";
 import { readPins, syncAllNotes } from "./vault";
-import { ProjectTrackerView, VIEW_TYPE_PROJECT_TRACKER } from "./view";
+import {
+	ICON_PROJECT_TRACKER,
+	ProjectTrackerView,
+	VIEW_TYPE_PROJECT_TRACKER,
+} from "./view";
 
 const DEFAULT_SETTINGS: PluginSettings = {
 	scanRoot: path.join(homedir(), "Documents", "projects"),
@@ -13,37 +18,81 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	showDormant: false,
 };
 
+const RIBBON_TITLE = "Open Project Tracker";
+
 export default class ProjectTrackerPlugin extends Plugin {
 	settings: PluginSettings = { ...DEFAULT_SETTINGS };
 	private projects: Project[] = [];
 
+	/**
+	 * Register everything the plugin adds to the workspace.
+	 *
+	 * Each step runs inside its own guard on purpose. A single throw used to
+	 * abort the rest of onload, which presented as a plugin with no ribbon icon,
+	 * no commands, and no settings tab and no error anywhere: Obsidian's own
+	 * report of a failed onload is a notice that flashes past plus a console
+	 * message behind the devtools window. Isolating the steps means the worst
+	 * case is one missing feature with a named, readable reason.
+	 */
 	override async onload(): Promise<void> {
-		await this.loadSettings();
+		const log = new StartupLog(this);
 
-		this.registerView(VIEW_TYPE_PROJECT_TRACKER, (leaf) => new ProjectTrackerView(leaf, this));
+		// Settings come first because every step below reads them, but a failure
+		// here falls back to the defaults rather than costing the whole plugin.
+		try {
+			await this.loadSettings();
+			log.pass("loadSettings");
+		} catch (error) {
+			this.settings = { ...DEFAULT_SETTINGS };
+			log.fail("loadSettings", error);
+		}
 
-		this.addRibbonIcon("git-branch", "Open Project Tracker", () => {
-			void this.activateView();
+		this.guard(log, "registerView", () => {
+			this.registerView(VIEW_TYPE_PROJECT_TRACKER, (leaf) => new ProjectTrackerView(leaf, this));
 		});
 
-		this.addCommand({
-			id: "open-project-tracker",
-			name: "Open Project Tracker",
-			callback: () => void this.activateView(),
+		this.guard(log, "addRibbonIcon", () => {
+			this.addRibbonIcon(ICON_PROJECT_TRACKER, RIBBON_TITLE, () => {
+				void this.activateView();
+			});
 		});
 
-		this.addCommand({
-			id: "rescan-projects",
-			name: "Rescan projects",
-			callback: () => {
-				void (async () => {
-					const projects = await this.refresh();
-					new Notice(`Project Tracker: ${projects.length} repositories scanned.`);
-				})();
-			},
+		this.guard(log, "addCommand:open-project-tracker", () => {
+			this.addCommand({
+				id: "open-project-tracker",
+				name: RIBBON_TITLE,
+				callback: () => void this.activateView(),
+			});
 		});
 
-		this.addSettingTab(new ProjectTrackerSettingTab(this.app, this));
+		this.guard(log, "addCommand:rescan-projects", () => {
+			this.addCommand({
+				id: "rescan-projects",
+				name: "Rescan projects",
+				callback: () => {
+					void (async () => {
+						const projects = await this.refresh();
+						new Notice(`Project Tracker: ${projects.length} repositories scanned.`);
+					})();
+				},
+			});
+		});
+
+		this.guard(log, "addSettingTab", () => {
+			this.addSettingTab(new ProjectTrackerSettingTab(this.app, this));
+		});
+
+		log.finish();
+	}
+
+	/** Run one registration step so a throw in it cannot abort the ones after it. */
+	private guard(log: StartupLog, step: string, run: () => void): void {
+		try {
+			run();
+			log.pass(step);
+		} catch (error) {
+			log.fail(step, error);
+		}
 	}
 
 	override onunload(): void {
@@ -145,7 +194,7 @@ class ProjectTrackerSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Show dormant projects")
-			.setDesc("Show projects with no activity in the last 30 days. Pinned projects always show.")
+			.setDesc("Show projects with no live work and no commit in the last 30 days. Pinned projects always show.")
 			.addToggle((toggle) =>
 				toggle.setValue(this.plugin.settings.showDormant).onChange(async (value) => {
 					this.plugin.settings.showDormant = value;

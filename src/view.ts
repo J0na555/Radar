@@ -4,6 +4,15 @@ import { rankProjects } from "./rank";
 
 export const VIEW_TYPE_PROJECT_TRACKER = "project-tracker-view";
 
+/**
+ * Icon for the ribbon button and the view tab.
+ *
+ * Obsidian types this parameter as a plain string, so a typo here compiles
+ * cleanly and then renders as a blank button instead of failing. Verified
+ * against the icon map shipped in Obsidian 1.13.7, which defines "git-branch".
+ */
+export const ICON_PROJECT_TRACKER = "git-branch";
+
 /** Human-readable age from an ISO date, e.g. "3d ago". */
 function relativeAge(iso: string | null, now: number): string {
 	if (!iso) return "no commits";
@@ -63,7 +72,7 @@ export class ProjectTrackerView extends ItemView {
 	}
 
 	override getIcon(): string {
-		return "git-branch";
+		return ICON_PROJECT_TRACKER;
 	}
 
 	override async onClose(): Promise<void> {

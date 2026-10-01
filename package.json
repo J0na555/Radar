@@ -1,0 +1,27 @@
+{
+  "name": "obsidian-plugin",
+  "version": "0.1.0",
+  "description": "Dashboard that tracks which of your local git projects you are actively working on.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "typecheck": "tsc --noEmit --skipLibCheck"
+  },
+  "keywords": [
+    "obsidian",
+    "dashboard",
+    "git",
+    "projects"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.24.2",
+    "obsidian": "latest",
+    "tslib": "^2.8.1",
+    "typescript": "^5.7.2"
+  }
+}

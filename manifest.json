@@ -1,0 +1,10 @@
+{
+	"id": "project-tracker",
+	"name": "Project Tracker",
+	"version": "0.1.0",
+	"minAppVersion": "1.5.0",
+	"description": "Dashboard that ranks your local git projects by what you are actually working on.",
+	"author": "J0na555",
+	"authorUrl": "https://github.com/J0na555",
+	"isDesktopOnly": true
+}

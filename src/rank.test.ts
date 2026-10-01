@@ -16,6 +16,7 @@ function facts(overrides: Partial<RepoFacts> = {}): RepoFacts {
 		path: "/repos/example",
 		name: "example",
 		root: "/repos",
+		gitReadable: true,
 		remote: "git@github.com:me/example.git",
 		github: "me/example",
 		branch: "main",

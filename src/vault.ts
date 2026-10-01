@@ -1,19 +1,6 @@
 import { App, TFile, TFolder, normalizePath } from "obsidian";
+import { applyFrontmatterPatch, desiredFrontmatter, diffManaged } from "./frontmatter";
 import { PluginSettings, ProjectFrontmatter, RepoFacts, ScoreResult } from "./types";
-
-/** Keys this plugin owns. Anything else in the frontmatter is the user's. */
-const MANAGED_KEYS = [
-	"project",
-	"repo_path",
-	"remote",
-	"github",
-	"pinned",
-	"last_commit",
-	"dirty",
-	"branch",
-	"score",
-	"status",
-] as const;
 
 /** Map a project name to a safe note filename. */
 export function noteFileName(projectName: string): string {
@@ -69,46 +56,6 @@ export async function readPins(app: App, settings: PluginSettings): Promise<Map<
 	return pins;
 }
 
-/** The managed keys we want to write for a project, right now. */
-export function desiredFrontmatter(
-	facts: RepoFacts,
-	score: ScoreResult,
-	pin: number,
-): ProjectFrontmatter {
-	return {
-		project: facts.name,
-		repo_path: facts.path,
-		remote: facts.remote ?? undefined,
-		github: facts.github ?? undefined,
-		// Always written, including 0. Skipping the key when unpinned would leave a
-		// stale rank on disk forever, because unpinning only changes it to 0.
-		pinned: pin > 0 ? pin : 0,
-		last_commit: facts.lastCommit ?? undefined,
-		dirty: facts.dirtyCount,
-		branch: facts.branch ?? undefined,
-		score: score.score,
-		status: score.status,
-	};
-}
-
-/**
- * Compare managed keys between what's on disk and what we want.
- * Returns the drifted keys only, so unchanged notes are never rewritten.
- */
-export function diffManaged(current: ProjectFrontmatter, desired: ProjectFrontmatter): Partial<ProjectFrontmatter> {
-	const patch: Record<string, unknown> = {};
-	const source = current as Record<string, unknown>;
-
-	for (const key of MANAGED_KEYS) {
-		const want = (desired as Record<string, unknown>)[key];
-		const have = source[key];
-		if (want === undefined) continue; // Leave absent keys alone rather than clobbering.
-		if (have === want) continue;
-		patch[key] = want;
-	}
-	return patch as Partial<ProjectFrontmatter>;
-}
-
 /**
  * Create or update one project's note.
  *
@@ -124,17 +71,18 @@ export async function syncProjectNote(
 	facts: RepoFacts,
 	score: ScoreResult,
 	pin: number,
+	now: number = Date.now(),
 ): Promise<string | null> {
 	await ensureFolder(app, settings.notesFolder);
 	const target = notePath(settings, facts.name);
-	const desired = desiredFrontmatter(facts, score, pin);
+	const desired = desiredFrontmatter(facts, score, pin, now);
 	const existing = app.vault.getAbstractFileByPath(target);
 
 	if (existing instanceof TFile) {
 		try {
 			await app.fileManager.processFrontMatter(existing, (fm) => {
 				const patch = diffManaged(fm as ProjectFrontmatter, desired);
-				Object.assign(fm, patch);
+				applyFrontmatterPatch(fm as Record<string, unknown>, patch);
 			});
 		} catch {
 			return null;
@@ -143,7 +91,7 @@ export async function syncProjectNote(
 	}
 
 	const lines = Object.entries(desired)
-		.filter(([, value]) => value !== undefined)
+		.filter(([, value]) => value !== undefined && value !== null)
 		.map(([key, value]) => `${key}: ${JSON.stringify(value)}`);
 
 	const body = [
@@ -176,10 +124,11 @@ export async function syncAllNotes(
 	app: App,
 	settings: PluginSettings,
 	entries: { facts: RepoFacts; score: ScoreResult; pin: number }[],
+	now: number = Date.now(),
 ): Promise<Map<string, string>> {
 	const written = new Map<string, string>();
 	for (const entry of entries) {
-		const path = await syncProjectNote(app, settings, entry.facts, entry.score, entry.pin);
+		const path = await syncProjectNote(app, settings, entry.facts, entry.score, entry.pin, now);
 		if (path) written.set(entry.facts.name, path);
 	}
 	return written;

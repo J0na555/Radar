@@ -134,7 +134,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 			pin: pins.get(fact.name) ?? 0,
 		}));
 
-		const notes = await syncAllNotes(this.app, this.settings, this.projects);
+		const notes = await syncAllNotes(this.app, this.settings, this.projects, now);
 		for (const project of this.projects) {
 			const notePath = notes.get(project.facts.name);
 			if (notePath) project.notePath = notePath;

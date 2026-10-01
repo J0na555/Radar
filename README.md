@@ -49,8 +49,26 @@ free, offline, and explainable.
 Each project gets one note under `private/Project Tracker/projects/`. The plugin
 manages only these frontmatter keys:
 
-`project`, `repo_path`, `remote`, `github`, `pinned`, `last_commit`, `dirty`,
-`branch`, `score`, `status`
+`project`, `repo_path`, `remote`, `remote_raw`, `web`, `github`, `pinned`,
+`last_commit`, `last_commit_rel`, `dirty`, `branch`, `score`, `status`
+
+| Key | What it holds |
+| --- | --- |
+| `remote` | The remote as you would open it: a browser URL for a GitHub repo, the verbatim git remote otherwise. |
+| `remote_raw` | The remote exactly as git reports it, so nothing is lost when `remote` is rewritten. |
+| `web` | The browser URL, or absent when the remote is not on github.com. |
+| `github` | The `owner/repo` slug, for anything already reading it. |
+| `last_commit` | Date of the last commit, `YYYY-MM-DD`. |
+| `last_commit_rel` | The same age in words, e.g. `31d ago`. Display only, so never sort a query on it. |
+
+`remote` is a URL rather than git's output because Obsidian reads
+`git@github.com:owner/repo.git` as a mailto address, so the value in the note
+opened the user's mail client instead of the repository. Only github.com is
+converted. A GitLab or self-hosted remote stays exactly as git reported it and
+gets no `web` key, rather than becoming a plausible-looking link to the wrong
+host. `last_commit` is date-only so it reads as a date in the properties panel
+and still sorts as plain text; `last_commit_rel` is a convenience for reading the
+note at a glance and goes stale between rescans.
 
 The body of the note is yours. The plugin never reads, rewrites, or deletes it.
 Pin a project by editing `pinned` in the note's frontmatter, or by
@@ -78,7 +96,7 @@ Keeping the folder under `private/` means your Quartz config's
 pnpm install
 pnpm dev      # watch build
 pnpm build    # typecheck + production bundle to main.js
-pnpm test     # node --test, runs src/rank.test.ts
+pnpm test     # node --test, runs the src/*.test.ts suites
 ```
 
 Deploy by copying `main.js`, `manifest.json`, and `styles.css` into

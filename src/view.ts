@@ -1,4 +1,5 @@
 import { ItemView, Menu, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import { relativeAge } from "./format";
 import { PluginSettings, Project, ProjectStatus } from "./types";
 import { rankProjects } from "./rank";
 
@@ -12,19 +13,6 @@ export const VIEW_TYPE_PROJECT_TRACKER = "project-tracker-view";
  * against the icon map shipped in Obsidian 1.13.7, which defines "git-branch".
  */
 export const ICON_PROJECT_TRACKER = "git-branch";
-
-/** Human-readable age from an ISO date, e.g. "3d ago". */
-function relativeAge(iso: string | null, now: number): string {
-	if (!iso) return "no commits";
-	const time = Date.parse(iso);
-	if (Number.isNaN(time)) return "unknown";
-	const days = Math.floor((now - time) / (24 * 60 * 60 * 1000));
-	if (days <= 0) return "today";
-	if (days === 1) return "yesterday";
-	if (days < 30) return `${days}d ago`;
-	const months = Math.floor(days / 30);
-	return months <= 1 ? `${days}d ago` : `${months}mo ago`;
-}
 
 export class ProjectTrackerView extends ItemView {
 	private projects: Project[] = [];

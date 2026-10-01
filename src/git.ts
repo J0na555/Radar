@@ -1,7 +1,7 @@
 import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { RepoFacts } from "./types";
+import type { RepoFacts } from "./types";
 
 /** Directories never worth descending into when hunting for repos. */
 const SKIP_DIRS = new Set(["node_modules", "vendor", "dist", "build", "target", "venv", ".venv"]);
@@ -82,6 +82,62 @@ export function parseGithubSlug(remote: string | null): string | null {
 }
 
 /**
+ * Split a remote URL into its host and owner/repo, or null when the shape is one
+ * we do not recognise.
+ *
+ * Kept separate from `parseGithubSlug` on purpose. That function throws the host
+ * away, so `git@gitlab.com:me/tool.git` and `git@github.com:me/tool.git` both come
+ * back as `me/tool`. Building a browser URL from it would hand a GitLab user a
+ * github.com link to whatever repo happened to share the name.
+ *
+ * Handles scp-style (`git@host:owner/repo.git`), scheme URLs with or without a
+ * user and a port, and both `.git` suffixes.
+ */
+function splitRemote(remote: string): { host: string; owner: string; repo: string } | null {
+	const scp = remote.match(/^(?:[^@/]+@)?([^:/]+):([^/]+\/.+)$/);
+	if (scp) {
+		const path = splitRepoPath(scp[2]);
+		return path ? { host: scp[1], ...path } : null;
+	}
+
+	const url = remote.match(/^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]+@)?([^/:]+)(?::\d+)?\/(.+)$/i);
+	if (url) {
+		const path = splitRepoPath(url[2]);
+		return path ? { host: url[1], ...path } : null;
+	}
+
+	return null;
+}
+
+/** Split `owner/repo(.git)` and strip the `.git` and any trailing slash. */
+function splitRepoPath(value: string): { owner: string; repo: string } | null {
+	const path = value.replace(/\/+$/, "").replace(/\.git$/i, "");
+	const slash = path.indexOf("/");
+	if (slash <= 0 || slash === path.length - 1) return null;
+	return { owner: path.slice(0, slash), repo: path.slice(slash + 1) };
+}
+
+/**
+ * Turn a git remote into a URL that opens in a browser, or null when no honest
+ * one can be built.
+ *
+ * Only github.com qualifies. A GitLab or self-hosted remote comes back null
+ * rather than a github.com guess, because a plausible-looking link to the wrong
+ * host is worse than no link.
+ *
+ * `git@github.com:owner/repo.git`  ->  https://github.com/owner/repo
+ * `ssh://git@github.com/owner/repo` ->  https://github.com/owner/repo
+ * `https://github.com/owner/repo`   ->  https://github.com/owner/repo
+ */
+export function toWebUrl(remote: string | null): string | null {
+	if (!remote) return null;
+	const parts = splitRemote(remote);
+	if (!parts) return null;
+	if (parts.host.toLowerCase() !== "github.com") return null;
+	return `https://github.com/${parts.owner}/${parts.repo}`;
+}
+
+/**
  * Resolve the branch origin treats as default.
  *
  * `refs/remotes/origin/HEAD` is the correct source but it is unset on roughly a
@@ -117,6 +173,11 @@ export function readRepoFacts(repoPath: string, root: string): RepoFacts {
 	const branch = git(repoPath, ["branch", "--show-current"]) || null;
 	const defaultBranch = resolveDefaultBranch(repoPath);
 
+	// `rev-parse --git-dir` succeeds for a readable repository whether or not it has
+	// any commits, so a false here means the failure was not "this value is
+	// absent". Every absent probe result below is only trustworthy when this is true.
+	const gitReadable = git(repoPath, ["rev-parse", "--git-dir"]) !== null;
+
 	// `--format=%cI` is committer date in strict ISO 8601, timezone included.
 	const lastCommit = git(repoPath, ["log", "-1", "--format=%cI"]) || null;
 
@@ -134,6 +195,7 @@ export function readRepoFacts(repoPath: string, root: string): RepoFacts {
 		path: repoPath,
 		name,
 		root,
+		gitReadable,
 		remote,
 		github: parseGithubSlug(remote),
 		branch,

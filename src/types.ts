@@ -20,6 +20,14 @@ export interface RepoFacts {
 	name: string;
 	/** Absolute path of the configured scan root. */
 	root: string;
+	/**
+	 * True when git could read this repository.
+	 *
+	 * False means the probes returned null for a reason other than the value being
+	 * absent, so every absent value here is unreliable and must not be written over
+	 * good data already on disk.
+	 */
+	gitReadable: boolean;
 	/** Origin remote URL, or null when the repo has no `origin`. */
 	remote: string | null;
 	/** Slug like `J0na555/myredis`, or null when there is no usable remote. */
@@ -65,15 +73,34 @@ export interface Project {
 export interface ProjectFrontmatter {
 	project?: string;
 	repo_path?: string;
-	remote?: string;
-	github?: string;
+	/**
+	 * The remote as a user would open it: a browser URL for a GitHub repo, the
+	 * verbatim git remote otherwise. `remote_raw` keeps the verbatim form.
+	 */
+	remote?: string | null;
+	/** Origin remote exactly as git reports it, or null when there is no remote. */
+	remote_raw?: string | null;
+	/** Browser URL for the remote, or null when the host is not github.com. */
+	web?: string | null;
+	github?: string | null;
 	pinned?: number;
-	last_commit?: string;
+	/** Last commit date, `YYYY-MM-DD`. */
+	last_commit?: string | null;
+	/** The same age in words, e.g. "31d ago". Display only, never sort on it. */
+	last_commit_rel?: string | null;
 	dirty?: number;
-	branch?: string;
+	branch?: string | null;
 	score?: number;
-	status?: string;
+	status?: string | null;
 }
+
+/**
+ * A change to apply to existing frontmatter. A `null` value means delete the key,
+ * as opposed to `undefined` in `ProjectFrontmatter`, which means leave it alone.
+ */
+export type FrontmatterPatch = {
+	[K in keyof ProjectFrontmatter]?: ProjectFrontmatter[K] | null;
+};
 
 export interface PluginSettings {
 	/** Absolute path scanned for git repositories. */

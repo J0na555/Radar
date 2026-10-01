@@ -2,7 +2,14 @@
  * Types shared across the plugin.
  */
 
-/** Lifecycle of a project, derived from its last commit age. */
+/**
+ * Lifecycle of a project.
+ *
+ * Dormant means no live work and no recent commit: no uncommitted changes, on the
+ * default branch, and nothing committed or touched in the last 30 days. Uncommitted
+ * changes or a non-default branch make a project active on their own, whatever the
+ * age of its last commit.
+ */
 export type ProjectStatus = "active" | "dormant" | "shipped";
 
 /** Git facts read off disk for one repository. */
@@ -73,6 +80,6 @@ export interface PluginSettings {
 	scanRoot: string;
 	/** Vault-relative folder holding one generated note per project. */
 	notesFolder: string;
-	/** Show projects whose last commit is older than 30 days. */
+	/** Show projects with no live work and no commit in the last 30 days. */
 	showDormant: boolean;
 }

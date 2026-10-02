@@ -120,3 +120,64 @@
 	padding: 8px;
 	font-style: italic;
 }
+
+.pt-probe {
+	font-size: var(--font-ui-smaller, 0.85em);
+	color: var(--text-muted);
+	margin: 6px 0;
+}
+
+.pt-probe.is-bad {
+	color: var(--text-error);
+}
+
+.pt-probe-row {
+	display: flex;
+	gap: 8px;
+	align-items: baseline;
+	font-size: var(--font-ui-smaller, 0.8em);
+	color: var(--text-muted);
+	padding: 2px 0 2px 8px;
+	border-left: 2px solid var(--background-modifier-border);
+}
+
+/* Three states, not two, so "installed but unusable" cannot read as fine. */
+.pt-probe-row.is-works {
+	border-left-color: var(--color-green);
+}
+
+.pt-probe-row.is-broken {
+	border-left-color: var(--text-error);
+}
+
+.pt-probe-row.is-absent {
+	border-left-color: var(--background-modifier-border-hover);
+	opacity: 0.7;
+}
+
+.pt-probe-state {
+	font-family: var(--font-monospace);
+	min-width: 6ch;
+	flex-shrink: 0;
+}
+
+.pt-probe-row.is-works .pt-probe-state {
+	color: var(--color-green);
+}
+
+.pt-probe-row.is-broken .pt-probe-state {
+	color: var(--text-error);
+}
+
+.pt-probe-detail {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.pt-probe-version {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-family: var(--font-monospace);
+}

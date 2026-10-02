@@ -135,6 +135,35 @@ export type FrontmatterPatch = {
 /** Which local CLI produces the summary. */
 export type ProviderId = "gemini" | "codex" | "opencode";
 
+/** How a provider actually behaves, which is three states and not two. */
+export type ProbeState = "works" | "broken" | "absent";
+
+/**
+ * What one provider probe found.
+ *
+ * Three states, not two. "Installed" and "usable" are different facts, and
+ * collapsing them is what hid a failure: gemini is installed on this machine and
+ * passes `--version` with exit 0 while being unable to authenticate, so a
+ * boolean `available` reported it as fine.
+ */
+export interface ProviderProbe {
+	provider: ProviderId;
+	state: ProbeState;
+	/** What to show the user. The CLI's own words where it supplied any. */
+	detail: string;
+	/** Epoch millis the probe ran. */
+	checkedAt: number;
+}
+
+/** Cached capability-probe results, persisted in data.json. */
+export interface ProviderDetection {
+	/** Epoch millis of the last full probe pass, 0 when never probed. */
+	checkedAt: number;
+	probes: ProviderProbe[];
+	/** Provider auto-detection chose, or null when none of them answered. */
+	selected: ProviderId | null;
+}
+
 export interface PluginSettings {
 	/** Absolute path scanned for git repositories. */
 	scanRoot: string;
@@ -142,10 +171,18 @@ export interface PluginSettings {
 	notesFolder: string;
 	/** Show projects with no live work and no commit in the last 30 days. */
 	showDormant: boolean;
-	/** CLI used to generate AI summaries. */
-	provider: ProviderId;
+	/**
+	 * CLI used to generate AI summaries, or null to use the detected one.
+	 *
+	 * null is the default, which is what makes detection mean anything: a fresh
+	 * install has made no choice and detection picks for it, and anything the
+	 * user does pick is an override that detection never quietly replaces.
+	 */
+	provider: ProviderId | null;
 	/** Recent commits handed to the model as context. */
 	commitCount: number;
 	/** Seconds a provider may run before it is killed. */
 	timeoutSeconds: number;
+	/** Cached provider detection, with the time it was taken. */
+	detection: ProviderDetection;
 }

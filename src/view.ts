@@ -29,6 +29,8 @@ export class ProjectTrackerView extends ItemView {
 			refresh: () => Promise<Project[]>;
 			getProjects: () => Project[];
 			generateSummary: (project: Project) => Promise<SummaryState | null>;
+			/** Where a failure is recorded, so a notice can name the file. */
+			errorLogSentence: string;
 		},
 	) {
 		super(leaf);
@@ -172,9 +174,14 @@ export class ProjectTrackerView extends ItemView {
 		try {
 			await this.plugin.generateSummary(project);
 		} catch (error) {
-			// generateSummary handles its own failures; this catches anything that
-			// escapes it so a thrown error never leaves the button stuck on "…".
-			new Notice(`Project Tracker: summary failed for ${project.facts.name} (${String(error)})`, 0);
+			// generateSummary handles its own failures and records them; this
+			// catches anything that escapes it so a thrown error never leaves the
+			// button stuck on "…". Names the log, because the point of the log is
+			// that a failure is readable without the devtools console.
+			new Notice(
+				`Project Tracker: summary failed for ${project.facts.name} (${String(error)}). ${this.plugin.errorLogSentence}`,
+				0,
+			);
 		} finally {
 			this.summarizing.delete(project.facts.name);
 			this.render();

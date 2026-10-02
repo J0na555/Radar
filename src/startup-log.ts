@@ -1,23 +1,9 @@
-import { appendFileSync, writeFileSync } from "fs";
 import { Notice } from "obsidian";
-import type { FileSystemAdapter, Plugin } from "obsidian";
+import type { Plugin } from "obsidian";
+import { LogWriter, resolvePluginFolderPath } from "./log-writer";
 
 /** Name of the log written next to main.js. */
 const LOG_NAME = "startup.log";
-
-/**
- * Absolute path of this plugin's log file, or null when it cannot be resolved.
- *
- * `getFullPath` is declared on FileSystemAdapter rather than on the DataAdapter
- * interface, so it needs a narrowing check before use.
- */
-function resolveLogPath(plugin: Plugin): string | null {
-	const dir = plugin.manifest.dir;
-	if (!dir) return null;
-	const adapter = plugin.app.vault.adapter as Partial<FileSystemAdapter>;
-	if (typeof adapter.getFullPath !== "function") return null;
-	return adapter.getFullPath(`${plugin.app.vault.configDir}/plugins/${dir}/${LOG_NAME}`);
-}
 
 /**
  * Per-step record of what happened during onload.
@@ -30,22 +16,22 @@ function resolveLogPath(plugin: Plugin): string | null {
  *
  * This records each step to a file in the plugin folder, so the outcome is
  * readable without the GUI, and raises one persistent notice naming the steps
- * that failed. Writing the log is best effort: a logger that throws would be its
- * own outage, so every filesystem call here swallows its errors.
+ * that failed. The disk work is shared with `errors.log` through `LogWriter`,
+ * because both logs need the same thing: append, cap, swallow every error.
  */
 export class StartupLog {
-	private readonly logPath: string | null = null;
+	private readonly writer: LogWriter;
 	private readonly failures: string[] = [];
-	private wroteToDisk = false;
 
 	constructor(plugin: Plugin) {
-		this.logPath = resolveLogPath(plugin);
-		this.truncate();
+		this.writer = new LogWriter(resolvePluginFolderPath(plugin, LOG_NAME));
+		// Start a fresh log so it always describes the current session.
+		this.writer.start(`--- Project Tracker startup ${new Date().toISOString()} ---`);
 	}
 
 	/** Record a step that succeeded. */
 	pass(step: string): void {
-		this.write(`PASS  ${step}`);
+		this.writer.append(`PASS  ${step}`);
 	}
 
 	/**
@@ -56,46 +42,25 @@ export class StartupLog {
 		this.failures.push(step);
 		const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
 		console.error(`Project Tracker: ${step} failed during onload`, error);
-		this.write(`FAIL  ${step}\n      ${detail.split("\n").join("\n      ")}`);
+		this.writer.append(`FAIL  ${step}\n      ${detail.split("\n").join("\n      ")}`);
 	}
 
 	/** Close the log out and put any failure on screen where it cannot be missed. */
 	finish(): void {
 		if (this.failures.length === 0) {
-			this.write("OK    onload completed, every registration succeeded");
+			this.writer.append("OK    onload completed, every registration succeeded");
 			return;
 		}
 
 		const names = this.failures.join(", ");
-		this.write(`DONE  ${this.failures.length} step(s) failed: ${names}`);
+		this.writer.append(`DONE  ${this.failures.length} step(s) failed: ${names}`);
 		// A log that could not be written is itself a failure to report, otherwise
 		// the notice points at a file that does not exist.
-		const where = this.wroteToDisk
+		const where = this.writer.written
 			? `Details in ${LOG_NAME}, in the plugin folder.`
 			: `${LOG_NAME} could not be written, so the stack trace is only in the developer console.`;
 		// Duration 0 keeps the notice up until the user dismisses it, which is the
 		// point: a load failure that scrolls away is the failure being reported.
 		new Notice(`Project Tracker loaded with errors in: ${names}. ${where}`, 0);
-	}
-
-	/** Start a fresh log so it always describes the current session. */
-	private truncate(): void {
-		if (!this.logPath) return;
-		try {
-			writeFileSync(this.logPath, `--- Project Tracker startup ${new Date().toISOString()} ---\n`);
-			this.wroteToDisk = true;
-		} catch {
-			// No writable log location. The notice and console still report.
-		}
-	}
-
-	private write(line: string): void {
-		if (!this.logPath) return;
-		try {
-			appendFileSync(this.logPath, `${line}\n`);
-			this.wroteToDisk = true;
-		} catch {
-			// See truncate().
-		}
 	}
 }

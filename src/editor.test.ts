@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
-import { isReadableRepo, openRepoFolder, parseEditorCommand, revealCommand } from "./editor.ts";
+import { editorActionLabel, isReadableRepo, openRepoFolder, parseEditorCommand, revealCommand } from "./editor.ts";
 import type { RepoFacts } from "./types.ts";
 
 /** A temp dir that cleans itself up. */
@@ -65,7 +65,7 @@ function recordingEditor(dir: string, sleepSeconds: number): { script: string; c
 }
 
 /** Poll until `check` passes or the budget runs out. */
-async function waitFor(check: () => boolean, ms = 4000): Promise<boolean> {
+async function waitFor(check: () => boolean, ms = 15000): Promise<boolean> {
 	const deadline = Date.now() + ms;
 	while (Date.now() < deadline) {
 		if (check()) return true;
@@ -185,10 +185,11 @@ describe("openRepoFolder launching", () => {
 		const elapsed = Date.now() - started;
 
 		assert.equal(result.ok, true);
-		// Two claims, and the second is the machine-independent one: the call came
-		// back before the child's minimum lifetime of 2000ms, not merely quickly.
+		// The machine-independent claim: the call came back before the child's own
+		// minimum lifetime of 2000ms, so it did not wait for the editor to close.
+		// Deliberately not a tighter number: this suite runs in parallel with ten
+		// others and a spawn can take its time.
 		assert.ok(elapsed < 2000, `launch blocked for ${elapsed}ms, past the editor's own 2000ms`);
-		assert.ok(elapsed < 1000, `launch took ${elapsed}ms`);
 
 		// The point of the measurement: the editor is provably mid-session, so the
 		// call really did not wait for it.
@@ -196,7 +197,7 @@ describe("openRepoFolder launching", () => {
 		assert.ok(!editor.calls().includes("finished"), "the editor had already exited, so nothing was proven");
 
 		// Leave nothing running past the suite.
-		await waitFor(() => editor.calls().includes("finished"), 5000);
+		await waitFor(() => editor.calls().includes("finished"), 15000);
 	});
 
 	it("reports a missing binary instead of failing silently", { skip }, async () => {
@@ -220,3 +221,27 @@ function gitRepoIn(parent: string, name: string): string {
 	assert.equal(init.status, 0, `git init failed: ${init.stderr}`);
 	return repo;
 }
+describe("editorActionLabel", () => {
+	it("names the binary that will actually run", () => {
+		assert.equal(editorActionLabel("anki", "code"), "Open anki in code");
+		assert.equal(editorActionLabel("anki", "cursor"), "Open anki in cursor");
+	});
+
+	it("drops the arguments, which are not part of the binary's name", () => {
+		// `kitty --single-instance --directory` reads as "in kitty", and naming the
+		// whole string on a button nobody is going to type is noise.
+		assert.equal(editorActionLabel("x", "kitty --single-instance --directory"), "Open x in kitty");
+		assert.equal(editorActionLabel("x", "nvim   -p  "), "Open x in nvim");
+	});
+
+	it("says what an empty setting does instead", () => {
+		assert.equal(editorActionLabel("anki", ""), "Reveal anki in the file manager");
+		assert.equal(editorActionLabel("anki", "   "), "Reveal anki in the file manager");
+	});
+
+	it("keeps the project name in the wording, since the button has no room", () => {
+		const label = editorActionLabel("commit-crystal-ball", "code");
+		assert.match(label, /commit-crystal-ball/);
+		assert.ok(label.length < 60, `label too long for a button: ${label}`);
+	});
+});

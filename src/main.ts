@@ -24,7 +24,7 @@ import {
 	sanitizeProbes,
 	selectProvider,
 } from "./provider";
-import { scoreRepo } from "./rank";
+import { DEFAULT_WEIGHTS, scoreRepo, sanitizeWeights } from "./rank";
 import { StartupLog } from "./startup-log";
 import {
 	aiNotePath,
@@ -42,6 +42,7 @@ import {
 	SummaryState,
 } from "./types";
 import { readPins, readPreviousDirty, readSummaryStates, syncAllNotes, writeSummaryNote } from "./vault";
+import { renderWeightSettings } from "./weight-settings";
 import {
 	ICON_PROJECT_TRACKER,
 	ProjectTrackerView,
@@ -52,6 +53,10 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	scanRoot: path.join(homedir(), "Documents", "projects"),
 	notesFolder: "private/Project Tracker/projects",
 	showDormant: false,
+	// The "why this score" line doubles the height of the list, so it is a toggle
+	// rather than a default. The tooltip on the score needs no permission.
+	explainScores: false,
+	weights: { ...DEFAULT_WEIGHTS },
 	// null means "detect a working CLI", which is the point of auto-detection. A
 	// value here would be a choice the user never made, and honouring it would
 	// reinstate the exact bug detection exists to fix.
@@ -323,7 +328,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 
 		this.projects = facts.map((fact: RepoFacts) => ({
 			facts: fact,
-			score: scoreRepo(fact, now),
+			score: scoreRepo(fact, now, this.settings.weights),
 			pin: pins.get(fact.name) ?? 0,
 			health: healthSignals(fact, previousDirty.get(fact.name) ?? null, now),
 		}));
@@ -495,6 +500,16 @@ export default class ProjectTrackerPlugin extends Plugin {
 
 		this.settings.commitCount = clampCommitCount(Number(this.settings.commitCount));
 		this.settings.timeoutSeconds = clampTimeoutSeconds(Number(this.settings.timeoutSeconds));
+
+		// Replaced rather than merged, and validated field by field: data.json is a
+		// file a person can edit, and half a scoring model reading NaN is worse
+		// than ignoring the edit. Always a fresh object, so nothing the settings tab
+		// writes can reach back and change the defaults.
+		this.settings.weights = sanitizeWeights(loaded?.weights);
+
+		// The editor command is a string with no valid values to reject, so it only
+		// needs trimming: a field left as spaces is the same as an empty one.
+		if (typeof this.settings.editorCommand !== "string") this.settings.editorCommand = "";
 	}
 
 	async saveSettings(): Promise<void> {
@@ -575,6 +590,18 @@ class ProjectTrackerSettingTab extends PluginSettingTab {
 			.addToggle((toggle) =>
 				toggle.setValue(this.plugin.settings.showDormant).onChange(async (value) => {
 					this.plugin.settings.showDormant = value;
+					await this.plugin.saveSettings();
+				}),
+			);
+
+		new Setting(containerEl)
+			.setName("Explain scores")
+			.setDesc(
+				"Show the score breakdown under every project name. Off, the score still carries it on hover; on, the list is twice as tall.",
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.explainScores).onChange(async (value) => {
+					this.plugin.settings.explainScores = value;
 					await this.plugin.saveSettings();
 				}),
 			);
@@ -696,5 +723,14 @@ class ProjectTrackerSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		containerEl.createEl("h3", { text: "Score weights" });
+
+		const weightNote = containerEl.createDiv({ cls: "pt-weight-note" });
+		weightNote.setText(
+			"The score is the sum of these. They were chosen by feel, so change anything that reads wrong. Takes effect on the next scan. The two day counts are independent: make the recent window wider than the stale one and the stale band is simply never reached, which is not an error and not worth warning you about.",
+		);
+
+		renderWeightSettings(containerEl, this.plugin.settings, () => this.plugin.saveSettings());
 	}
 }

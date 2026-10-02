@@ -14,7 +14,7 @@
  * No `obsidian` import, so `node --test` loads this directly.
  */
 import { relativeAge } from "./format.ts";
-import { ageInDays, WEIGHTS } from "./rank.ts";
+import { ageInDays, DEFAULT_WEIGHTS } from "./rank.ts";
 import type { HealthSignal, RepoFacts } from "./types.ts";
 
 /**
@@ -72,12 +72,12 @@ function longLivedBranch(facts: RepoFacts, now: number): HealthSignal | null {
 	if (!facts.onNonDefaultBranch || facts.branch === null) return null;
 	const ageDays = ageInDays(facts.lastCommit, now);
 	// No commit date means a repo with no commits, which is new rather than stale.
-	if (ageDays === null || ageDays <= WEIGHTS.staleCommitWindowDays) return null;
+	if (ageDays === null || ageDays <= DEFAULT_WEIGHTS.staleCommitWindowDays) return null;
 
 	return {
 		id: "long-branch",
 		badge: "branch",
-		detail: `On ${facts.branch}, and the last commit anywhere on it is ${relativeAge(facts.lastCommit, now)}. That is past the ${WEIGHTS.staleCommitWindowDays}-day line this panel uses for everything else.`,
+		detail: `On ${facts.branch}, and the last commit anywhere on it is ${relativeAge(facts.lastCommit, now)}. That is past the ${DEFAULT_WEIGHTS.staleCommitWindowDays}-day line this panel uses for everything else.`,
 	};
 }
 

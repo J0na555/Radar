@@ -1,7 +1,16 @@
-import { ItemView, Menu, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Menu, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import { editorActionLabel } from "./editor";
 import { relativeAge } from "./format";
 import { PluginSettings, Project, ProjectStatus, SummaryState } from "./types";
 import { rankProjects } from "./rank";
+import {
+	appendHealthBadges,
+	createOpenControl,
+	createPinSlot,
+	createScoreSlot,
+	createSummaryControl,
+	createWhyLine,
+} from "./row-controls";
 
 export const VIEW_TYPE_PROJECT_TRACKER = "project-tracker-view";
 
@@ -112,6 +121,21 @@ export class ProjectTrackerView extends ItemView {
 			})();
 		});
 
+		// Off by default: the line doubles the height of a 45-row list. On, every
+		// row says how its score was made instead of only offering a number.
+		const explain = controls.createEl("button", {
+			cls: `pt-btn ${this.plugin.settings.explainScores ? "is-on" : ""}`.trim(),
+			attr: { "aria-pressed": String(this.plugin.settings.explainScores) },
+		});
+		explain.setText("Why");
+		explain.addEventListener("click", () => {
+			void (async () => {
+				this.plugin.settings.explainScores = !this.plugin.settings.explainScores;
+				await this.plugin.saveSettings();
+				this.render();
+			})();
+		});
+
 		const root = this.contentEl.createDiv({ cls: "pt-root" });
 		root.setText(this.plugin.settings.scanRoot);
 		return header;
@@ -156,7 +180,10 @@ export class ProjectTrackerView extends ItemView {
 
 		menu.addSeparator();
 		menu.addItem((item) =>
-			item.setTitle(this.openLabel(project)).setIcon("folder-open").onClick(() => void this.openRepo(project)),
+			item
+				.setTitle(editorActionLabel(project.facts.name, this.plugin.settings.editorCommand))
+				.setIcon("folder-open")
+				.onClick(() => void this.plugin.openRepoFolder(project)),
 		);
 		menu.addItem((item) =>
 			item.setTitle("Open note").setIcon("file-text").onClick(() => void this.openNote(project)),
@@ -204,96 +231,10 @@ export class ProjectTrackerView extends ItemView {
 		new Notice(`Project Tracker: ${summary.path} is not in the vault any more. Regenerate it.`);
 	}
 
-	/**
-	 * The summary control for one row.
-	 *
-	 * Three states, and the difference between them is the point of the whole
-	 * feature: nothing generated, something generated and current, and something
-	 * generated that the repo has since moved past. A stale summary is the one
-	 * that reads as authoritative while being wrong, so it gets its own wording
-	 * and a warning colour rather than sharing a button with the current case.
-	 */
-	private renderSummaryControl(project: Project): HTMLElement {
-		const summary = project.summary;
-		const running = this.summarizing.has(project.facts.name);
-
-		const label = running
-			? "…"
-			: !summary
-				? "AI"
-				: summary.stale
-					? "stale"
-					: "AI";
-
-		const button = this.contentEl.ownerDocument.createElement("button");
-		button.className = [
-			"pt-btn",
-			"pt-ai",
-			summary?.stale ? "is-stale" : "",
-			!summary ? "is-none" : "",
-		]
-			.filter(Boolean)
-			.join(" ");
-		button.setAttribute("type", "button");
-		button.textContent = label;
-		button.disabled = running;
-
-		let title = summary
-			? `Regenerate AI summary (written ${summary.generatedAt ?? "at an unknown time"} from ${summary.commit ?? "no commit"})`
-			: "Generate an AI summary from git history";
-		if (summary?.stale) {
-			title = `Regenerate AI summary. This one is out of date: ${summary.staleReason}`;
-		}
-		button.setAttribute("aria-label", title);
-		button.setAttribute("title", title);
-		button.addEventListener("click", (event) => {
-			event.stopPropagation();
-			void this.runSummary(project);
-		});
-
-		return button;
+	/** The document this view draws into. Rows build their elements from it. */
+	private get doc(): Document {
+		return this.contentEl.ownerDocument;
 	}
-
-	/**
-	 * What the open button will do, in words, before it is pressed.
-	 *
-	 * Two different actions share one button, so the label has to say which one
-	 * is currently on offer rather than leaving it to the setting.
-	 */
-	private openLabel(project: Project): string {
-		const editor = this.plugin.settings.editorCommand.trim();
-		return editor
-			? `Open ${project.facts.name} in ${editor.split(/\s+/)[0]}`
-			: `Reveal ${project.facts.name} in the file manager`;
-	}
-
-	/**
-	 * The button that hands the repo folder to the editor.
-	 *
-	 * An icon rather than text, because every row carries one and the panel is a
-	 * list, not a form. Same labelling contract as the summary control: the
-	 * wording goes on both `aria-label` and `title`, so it is reachable without a
-	 * mouse as well as readable on hover.
-	 */
-	private renderOpenControl(project: Project): HTMLElement {
-		const button = this.contentEl.ownerDocument.createElement("button");
-		button.className = "pt-btn pt-open";
-		button.setAttribute("type", "button");
-		const label = this.openLabel(project);
-		button.setAttribute("aria-label", label);
-		button.setAttribute("title", label);
-		setIcon(button, "folder-open");
-		button.addEventListener("click", (event) => {
-			event.stopPropagation();
-			void this.plugin.openRepoFolder(project);
-		});
-		return button;
-	}
-
-	private async openRepo(project: Project): Promise<void> {
-		await this.plugin.openRepoFolder(project);
-	}
-
 	private async openNote(project: Project): Promise<void> {
 		const file = project.notePath ? this.app.vault.getAbstractFileByPath(project.notePath) : null;
 		if (file instanceof TFile) {
@@ -325,28 +266,30 @@ export class ProjectTrackerView extends ItemView {
 
 		// After the facts, so the eye reads what the repo is before what is wrong
 		// with it. Empty for a healthy repo, which is every row most of the time.
-		for (const signal of project.health) {
-			const badge = meta.createSpan({ cls: `pt-warn is-${signal.id}` });
-			badge.setText(signal.badge);
-			// Both attributes, same contract as the summary control: readable on
-			// hover and reachable without a mouse.
-			badge.setAttribute("aria-label", signal.detail);
-			badge.setAttribute("title", signal.detail);
+		appendHealthBadges(meta, project.health);
+
+		// Off unless asked for, and once per row rather than per score: the tooltip
+		// is always there, this is for reading without hovering anything.
+		if (this.plugin.settings.explainScores) {
+			main.appendChild(createWhyLine(this.doc, project.score));
 		}
 
 		const right = row.createDiv({ cls: "pt-right" });
-		if (pinned) {
-			const pin = right.createSpan({ cls: "pt-pin" });
-			pin.setText(`#${project.pin}`);
-		}
-		// The summary control sits with the other row-level controls, so the
-		// existing pt-main / pt-right split is unchanged.
-		const ai = right.createSpan({ cls: "pt-ai-slot" });
-		ai.appendChild(this.renderSummaryControl(project));
-		const open = right.createSpan({ cls: "pt-open-slot" });
-		open.appendChild(this.renderOpenControl(project));
-		const score = right.createSpan({ cls: "pt-score" });
-		score.setText(String(project.score.score));
+		// Fixed order, every row: pin slot, editor, summary, score. The pin slot is
+		// drawn even when the project is unpinned, so the score never moves
+		// sideways when something gets pinned.
+		right.appendChild(createPinSlot(this.doc, pinned ? project.pin : null));
+		right.appendChild(
+			createOpenControl(this.doc, editorActionLabel(project.facts.name, this.plugin.settings.editorCommand), () =>
+				void this.plugin.openRepoFolder(project),
+			),
+		);
+		right.appendChild(
+			createSummaryControl(this.doc, project, this.summarizing.has(project.facts.name), () =>
+				void this.runSummary(project),
+			),
+		);
+		right.appendChild(createScoreSlot(this.doc, project.score));
 
 		if (project.score.status !== "active") {
 			row.addClass(`is-${project.score.status satisfies ProjectStatus}`);

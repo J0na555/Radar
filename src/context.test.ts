@@ -12,6 +12,7 @@ import {
 	COMMIT_COUNT_DEFAULT,
 	parsePorcelainPath,
 } from "./context.ts";
+import { DEFAULT_WEIGHTS } from "./rank.ts";
 import type { PluginSettings, RepoFacts } from "./types.ts";
 
 /**
@@ -219,6 +220,8 @@ describe("buildPrompt", () => {
 		scanRoot: "/repos",
 		notesFolder: "private/Project Tracker/projects",
 		showDormant: false,
+		explainScores: false,
+		weights: { ...DEFAULT_WEIGHTS },
 		provider: "gemini",
 		commitCount: 20,
 		timeoutSeconds: 120,

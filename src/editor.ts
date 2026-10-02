@@ -211,3 +211,21 @@ function firstLine(value: string): string {
 	}
 	return "";
 }
+
+/**
+ * What the open button will do, in words, before it is pressed.
+ *
+ * Two different actions share one button, so the label has to say which one is
+ * currently on offer rather than leaving the reader to consult the settings. Only
+ * the binary's name, not its arguments: `kitty --single-instance --directory`
+ * reads as "in kitty".
+ *
+ * Lives here rather than in the row builder because it is a fact about the
+ * editor setting, which this module owns.
+ */
+export function editorActionLabel(projectName: string, setting: string): string {
+	const parsed = parseEditorCommand(setting);
+	return parsed === null
+		? `Reveal ${projectName} in the file manager`
+		: `Open ${projectName} in ${parsed.command}`;
+}

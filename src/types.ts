@@ -73,6 +73,33 @@ export interface ScorePart {
 	points: number;
 }
 
+/**
+ * The score model's tunables.
+ *
+ * A settings value rather than module constants, because the log curve and the
+ * 25 points for a non-default branch were both chosen by feel. `src/rank.ts`
+ * holds the defaults and the bounds.
+ */
+export interface ScoreWeights {
+	/** Points at the top of the uncommitted-change curve. */
+	dirty: number;
+	/** Files at which the uncommitted-change points saturate at `dirty`. */
+	dirtySaturation: number;
+	nonDefaultBranch: number;
+	/** Points for a commit made today. */
+	recentCommit: number;
+	/** Days over which a commit fades from `recentCommit` to nothing. */
+	recentCommitWindowDays: number;
+	/** Points for a commit in the fade-out band between the two windows. */
+	staleCommit: number;
+	/** Days after which a commit counts for nothing and a project can go dormant. */
+	staleCommitWindowDays: number;
+	/** Points for a folder that has been touched very recently. */
+	freshDir: number;
+	/** Days a folder counts as recently touched. */
+	freshDirWindowDays: number;
+}
+
 /** Which health warning fired. */
 export type HealthSignalId = "sustained-dirty" | "long-branch" | "stashed" | "unpushed";
 
@@ -210,6 +237,16 @@ export interface PluginSettings {
 	notesFolder: string;
 	/** Show projects with no live work and no commit in the last 30 days. */
 	showDormant: boolean;
+	/**
+	 * Show the "why this score" line under every project name.
+	 *
+	 * Off by default because it doubles the height of a 45-row list, which is the
+	 * cost that made the bare number unreadable in the first place. The tooltip on
+	 * the score is always there either way.
+	 */
+	explainScores: boolean;
+	/** Points the score model awards. */
+	weights: ScoreWeights;
 	/**
 	 * CLI used to generate AI summaries, or null to use the detected one.
 	 *

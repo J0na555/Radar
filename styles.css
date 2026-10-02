@@ -134,9 +134,43 @@
 	color: var(--text-muted);
 }
 
-.pt-pin {
+/*
+ * Pin rank and score, in slots of their own.
+ *
+ * They shared one position before, so which number was which came down to where
+ * it sat, and the score jumped sideways whenever a project was pinned. Each slot
+ * carries the word that names it, and the pin slot is drawn either way so the
+ * layout does not move under the number.
+ */
+.pt-slot {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 3px;
+	min-width: 5.5ch;
+	justify-content: flex-end;
+}
+
+.pt-slot-tag {
+	font-size: 0.8em;
+	color: var(--text-faint);
+}
+
+.pt-slot-pin .pt-slot-value {
 	color: var(--interactive-accent);
 	font-weight: 600;
+}
+
+.pt-slot-score .pt-slot-value {
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.pt-why {
+	font-size: var(--font-ui-smaller, 0.8em);
+	color: var(--text-faint);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .pt-open {
@@ -157,6 +191,17 @@
 	color: var(--text-faint);
 	padding: 8px;
 	font-style: italic;
+}
+
+/* The weight sliders, as one group. Nine rows is enough to need a heading. */
+.pt-weights {
+	margin-top: 4px;
+}
+
+.pt-weight-note {
+	font-size: var(--font-ui-smaller, 0.85em);
+	color: var(--text-muted);
+	margin: 6px 0;
 }
 
 .pt-probe {

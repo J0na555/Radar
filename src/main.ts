@@ -12,6 +12,7 @@ import {
 } from "./context";
 import { scanProjects } from "./git";
 import { openRepoFolder } from "./editor";
+import { healthSignals } from "./health";
 import { ErrorLog } from "./log-writer";
 import {
 	detectProvidersAsync,
@@ -40,7 +41,7 @@ import {
 	RepoFacts,
 	SummaryState,
 } from "./types";
-import { readPins, readSummaryStates, syncAllNotes, writeSummaryNote } from "./vault";
+import { readPins, readPreviousDirty, readSummaryStates, syncAllNotes, writeSummaryNote } from "./vault";
 import {
 	ICON_PROJECT_TRACKER,
 	ProjectTrackerView,
@@ -308,18 +309,23 @@ export default class ProjectTrackerPlugin extends Plugin {
 	/**
 	 * Rescan, score, then write the per-project notes.
 	 *
-	 * Pins are read before scoring so a manual rank survives a rescan, and writes
-	 * happen after ranking so notes reflect the same state the view displays.
+	 * Pins and the previous dirty count are read before scoring so a manual rank
+	 * survives a rescan and a sustained-dirty warning knows what the last scan
+	 * saw. Both must happen before the notes are written: the dirty count is
+	 * written by this very scan, so reading it afterwards would compare the repo
+	 * against itself and warn on every repo that has ever been dirty.
 	 */
 	async refresh(): Promise<Project[]> {
 		const facts = scanProjects(this.settings.scanRoot);
 		const pins = await readPins(this.app, this.settings);
+		const previousDirty = await readPreviousDirty(this.app, this.settings);
 		const now = Date.now();
 
 		this.projects = facts.map((fact: RepoFacts) => ({
 			facts: fact,
 			score: scoreRepo(fact, now),
 			pin: pins.get(fact.name) ?? 0,
+			health: healthSignals(fact, previousDirty.get(fact.name) ?? null, now),
 		}));
 
 		const notes = await syncAllNotes(this.app, this.settings, this.projects, now);

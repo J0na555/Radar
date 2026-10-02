@@ -50,6 +50,8 @@ function factsFor(dir: string, overrides: Partial<RepoFacts> = {}): RepoFacts {
 		onNonDefaultBranch: false,
 		lastCommit: "2026-10-01T09:00:00+03:00",
 		dirtyCount: 0,
+		stashCount: 0,
+		unpushedCount: 0,
 		dirMtime: Date.now(),
 		...overrides,
 	};

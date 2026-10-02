@@ -31,6 +31,27 @@ export async function ensureFolder(app: App, folder: string): Promise<void> {
 }
 
 /**
+ * Every existing project note's managed frontmatter, keyed by project name.
+ *
+ * One walk of the notes folder, shared by the readers below. A project with no
+ * note is simply absent, which is the normal case for anything the user never
+ * touched.
+ */
+function readNoteFrontmatter(app: App, settings: PluginSettings): Map<string, ProjectFrontmatter> {
+	const notes = new Map<string, ProjectFrontmatter>();
+	const folder = app.vault.getAbstractFileByPath(normalizePath(settings.notesFolder));
+	if (!(folder instanceof TFolder)) return notes;
+
+	for (const child of folder.children) {
+		if (!(child instanceof TFile) || child.extension !== "md") continue;
+		const fm = app.metadataCache.getFileCache(child)?.frontmatter as ProjectFrontmatter | undefined;
+		if (!fm) continue;
+		notes.set(typeof fm.project === "string" ? fm.project : child.basename, fm);
+	}
+	return notes;
+}
+
+/**
  * Read the user's pin rank from every existing project note.
  *
  * Returns a map of project name to pin. A project with no note, or a note with
@@ -38,19 +59,32 @@ export async function ensureFolder(app: App, folder: string): Promise<void> {
  */
 export async function readPins(app: App, settings: PluginSettings): Promise<Map<string, number>> {
 	const pins = new Map<string, number>();
-	const folder = app.vault.getAbstractFileByPath(normalizePath(settings.notesFolder));
-	if (!(folder instanceof TFolder)) return pins;
-
-	for (const child of folder.children) {
-		if (!(child instanceof TFile) || child.extension !== "md") continue;
-		const cache = app.metadataCache.getFileCache(child);
-		const fm = cache?.frontmatter as ProjectFrontmatter | undefined;
-		if (!fm) continue;
-		const name = typeof fm.project === "string" ? fm.project : child.basename;
+	for (const [name, fm] of readNoteFrontmatter(app, settings)) {
 		const pinned = Number(fm.pinned);
 		if (Number.isFinite(pinned) && pinned > 0) pins.set(name, pinned);
 	}
 	return pins;
+}
+
+/**
+ * Read the dirty file count each project had at the previous scan.
+ *
+ * `dirty` is written on every scan, so this is the memory the "sustained dirty"
+ * warning reads instead of a history file of its own. A project with no note, no
+ * `dirty` key, or a value that is not a number is absent, and absent means "no
+ * history", which the warning treats as nothing to say.
+ *
+ * Must be read before `syncAllNotes` runs in the same scan, or it reads the
+ * value this scan just wrote and every repo looks like it has been dirty for a
+ * while. `main.refresh` orders the two for exactly that reason.
+ */
+export async function readPreviousDirty(app: App, settings: PluginSettings): Promise<Map<string, number>> {
+	const counts = new Map<string, number>();
+	for (const [name, fm] of readNoteFrontmatter(app, settings)) {
+		const dirty = Number(fm.dirty);
+		if (Number.isFinite(dirty)) counts.set(name, dirty);
+	}
+	return counts;
 }
 
 /**

@@ -100,6 +100,32 @@
 	color: var(--text-warning);
 }
 
+/*
+ * One compact word per firing signal. No count: the number is in the tooltip and
+ * adding it here is how this panel started adding a number for everything.
+ */
+.pt-warn {
+	flex-shrink: 0;
+	padding: 0 4px;
+	border-radius: 4px;
+	font-family: var(--font-monospace);
+	font-size: 0.85em;
+	background-color: var(--background-modifier-border);
+	color: var(--text-muted);
+}
+
+.pt-warn.is-sustained-dirty,
+.pt-warn.is-long-branch {
+	background-color: var(--background-modifier-error-hover);
+	color: var(--text-error);
+}
+
+/* Work that exists in exactly one place, so it gets the loudest colour. */
+.pt-warn.is-unpushed {
+	background-color: var(--background-modifier-error);
+	color: var(--text-on-accent);
+}
+
 .pt-right {
 	display: flex;
 	align-items: center;

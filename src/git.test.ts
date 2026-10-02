@@ -108,6 +108,105 @@ describe("relativeAge", () => {
 	});
 });
 
+/** A temp dir that cleans itself up. */
+function tmpDir(prefix: string): string {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+	process.on("exit", () => fs.rmSync(dir, { recursive: true, force: true }));
+	return dir;
+}
+
+/** Run git and fail the test loudly if it did not work. */
+function runGit(cwd: string, args: string[]): void {
+	const res = spawnSync("git", ["-c", "user.email=pt@example.com", "-c", "user.name=Project Tracker", ...args], {
+		cwd,
+		encoding: "utf8",
+	});
+	assert.equal(res.status, 0, `git ${args.join(" ")} failed: ${res.stderr}`);
+}
+
+/** An initialised repo with one commit on main. */
+function repoWithCommit(prefix: string): string {
+	const dir = tmpDir(prefix);
+	runGit(dir, ["init", "-q", "-b", "main", "."]);
+	runGit(dir, ["commit", "-q", "--allow-empty", "-m", "first"]);
+	return dir;
+}
+
+/**
+ * A clone of a bare origin that already holds one commit.
+ *
+ * A real clone, not a stubbed remote: the unpushed probe compares HEAD against an
+ * upstream ref, so testing it without an upstream would only test the null path.
+ */
+function cloneWithOrigin(prefix: string): { repo: string; origin: string } {
+	const root = tmpDir(prefix);
+	const origin = path.join(root, "origin.git");
+	const seed = path.join(root, "seed");
+
+	runGit(root, ["init", "-q", "--bare", "-b", "main", origin]);
+	runGit(root, ["clone", "-q", origin, seed]);
+	runGit(seed, ["commit", "-q", "--allow-empty", "-m", "first"]);
+	runGit(seed, ["push", "-q", "origin", "main"]);
+
+	const repo = path.join(root, "repo");
+	runGit(root, ["clone", "-q", origin, repo]);
+	return { repo, origin };
+}
+
+describe("readRepoFacts health probes", () => {
+	it("counts a stash", () => {
+		// The one real case on this machine, reproduced for real rather than faked.
+		const dir = repoWithCommit("pt-stash-");
+		fs.writeFileSync(path.join(dir, "work.txt"), "half a feature\n");
+		runGit(dir, ["add", "work.txt"]);
+		runGit(dir, ["stash", "push", "-q", "-m", "half a feature"]);
+
+		assert.equal(readRepoFacts(dir, dir).stashCount, 1);
+	});
+
+	it("reports zero stashes as zero, not as unknown", () => {
+		const dir = repoWithCommit("pt-no-stash-");
+		const facts = readRepoFacts(dir, dir);
+		assert.equal(facts.stashCount, 0);
+		assert.notEqual(facts.stashCount, null);
+	});
+
+	it("counts commits the upstream does not have", () => {
+		const { repo } = cloneWithOrigin("pt-unpushed-");
+		assert.equal(readRepoFacts(repo, repo).unpushedCount, 0);
+
+		runGit(repo, ["commit", "-q", "--allow-empty", "-m", "local only"]);
+		runGit(repo, ["commit", "-q", "--allow-empty", "-m", "also local"]);
+
+		const facts = readRepoFacts(repo, repo);
+		assert.equal(facts.unpushedCount, 2);
+		// And the rest of the facts are still right, so one probe failing to be
+		// interesting did not disturb anything else.
+		assert.equal(facts.branch, "main");
+		assert.equal(facts.defaultBranch, "main");
+		assert.equal(facts.onNonDefaultBranch, false);
+	});
+
+	it("reports no upstream as unknown rather than as unpushed", () => {
+		// Every repo that was never pushed has no upstream. Calling that "every
+		// commit is unpushed" would fire the badge on all of them.
+		const dir = repoWithCommit("pt-no-upstream-");
+		runGit(dir, ["commit", "-q", "--allow-empty", "-m", "local only"]);
+
+		const facts = readRepoFacts(dir, dir);
+		assert.equal(facts.unpushedCount, null);
+		assert.equal(facts.stashCount, 0);
+	});
+
+	it("leaves both probes unknown when git cannot read the repo at all", () => {
+		const dir = tmpDir("pt-unreadable-");
+		const facts = readRepoFacts(dir, dir);
+		assert.equal(facts.gitReadable, false);
+		assert.equal(facts.stashCount, null);
+		assert.equal(facts.unpushedCount, null);
+	});
+});
+
 describe("readRepoFacts on a repo with no commits", () => {
 	it("reports no commit date but still trusts git", () => {
 		// The load-bearing case for the note writer: a fresh `git init` has no

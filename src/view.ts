@@ -323,6 +323,17 @@ export class ProjectTrackerView extends ItemView {
 		const age = meta.createSpan({ cls: "pt-age" });
 		age.setText(relativeAge(project.facts.lastCommit, this.now));
 
+		// After the facts, so the eye reads what the repo is before what is wrong
+		// with it. Empty for a healthy repo, which is every row most of the time.
+		for (const signal of project.health) {
+			const badge = meta.createSpan({ cls: `pt-warn is-${signal.id}` });
+			badge.setText(signal.badge);
+			// Both attributes, same contract as the summary control: readable on
+			// hover and reachable without a mouse.
+			badge.setAttribute("aria-label", signal.detail);
+			badge.setAttribute("title", signal.detail);
+		}
+
 		const right = row.createDiv({ cls: "pt-right" });
 		if (pinned) {
 			const pin = right.createSpan({ cls: "pt-pin" });

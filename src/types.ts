@@ -42,6 +42,20 @@ export interface RepoFacts {
 	lastCommit: string | null;
 	/** Count of `git status --porcelain` lines. */
 	dirtyCount: number;
+	/**
+	 * Entries in `git stash list`, or null when the probe could not answer.
+	 *
+	 * Null is not zero: a failed probe must not read as "no stashes".
+	 */
+	stashCount: number | null;
+	/**
+	 * Commits on this branch that its upstream does not have, or null when there
+	 * is no upstream to compare against or the probe failed.
+	 *
+	 * A repo with no remote has no upstream, so this is null on every repo that
+	 * was never pushed, which is a normal state rather than a warning.
+	 */
+	unpushedCount: number | null;
 	/** Filesystem mtime of the repo directory, in epoch millis. */
 	dirMtime: number;
 }
@@ -59,12 +73,37 @@ export interface ScorePart {
 	points: number;
 }
 
+/** Which health warning fired. */
+export type HealthSignalId = "sustained-dirty" | "long-branch" | "stashed" | "unpushed";
+
+/**
+ * One health warning, as the row shows it.
+ *
+ * A `badge` and a `detail`, and never a bare number. The row is a list of 45
+ * projects; putting a count next to each one for every possible problem is how
+ * the panel became unreadable in the first place.
+ */
+export interface HealthSignal {
+	id: HealthSignalId;
+	/** The compact word on the row. */
+	badge: string;
+	/** The whole explanation, for the hover and for a screen reader. */
+	detail: string;
+}
+
 /** A repo plus its ranking, as persisted in frontmatter and shown in the view. */
 export interface Project {
 	facts: RepoFacts;
 	score: ScoreResult;
 	/** User-controlled rank. 0 means unpinned. Lower sorts first. */
 	pin: number;
+	/**
+	 * Health warnings that fired for this repo on the last scan.
+	 *
+	 * Empty for a healthy repo, which is the normal case and the whole point:
+	 * only a firing signal earns any space on the row.
+	 */
+	health: HealthSignal[];
 	/** Absolute vault path of the per-project note, once synced. */
 	notePath?: string;
 	/**

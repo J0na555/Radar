@@ -163,6 +163,34 @@ function resolveDefaultBranch(cwd: string): string | null {
 }
 
 /**
+ * Count entries in `git stash list`, or null when the probe failed.
+ *
+ * Exit 0 with empty output is the healthy answer, so zero and "could not ask" are
+ * different results and stay different types here.
+ */
+function readStashCount(cwd: string): number | null {
+	const out = git(cwd, ["stash", "list"]);
+	if (out === null) return null;
+	return out.split("\n").filter((line) => line.length > 0).length;
+}
+
+/**
+ * Count commits on this branch that its upstream does not have, or null.
+ *
+ * `@{u}` is git's own reflog shorthand and is passed literally: no shell is
+ * involved, so nothing expands it before git sees it. A repo with no upstream
+ * makes this fail, which is null and not zero. That is deliberate: a repo that
+ * was never pushed is a normal state, and "every commit here is unpushed" would
+ * fire on every local-only repo ever written.
+ */
+function readUnpushedCount(cwd: string): number | null {
+	const out = git(cwd, ["rev-list", "--count", "@{u}..HEAD"]);
+	if (out === null) return null;
+	const parsed = Number.parseInt(out.trim(), 10);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
  * Collect git facts for one repository. Assumes `repoPath` is a repo root.
  * Every probe degrades to null rather than throwing, so a single odd repo
  * cannot abort a whole scan.
@@ -183,6 +211,12 @@ export function readRepoFacts(repoPath: string, root: string): RepoFacts {
 
 	const porcelain = git(repoPath, ["status", "--porcelain"]);
 	const dirtyCount = porcelain === null ? 0 : porcelain.split("\n").filter((l) => l.length > 0).length;
+
+	// Both health probes are skipped entirely when git could not read the repo.
+	// Running them anyway would cost two spawns to learn nothing, and the null
+	// they return is exactly the value that must not overwrite good data.
+	const stashCount = gitReadable ? readStashCount(repoPath) : null;
+	const unpushedCount = gitReadable ? readUnpushedCount(repoPath) : null;
 
 	let dirMtime = 0;
 	try {
@@ -205,6 +239,8 @@ export function readRepoFacts(repoPath: string, root: string): RepoFacts {
 		onNonDefaultBranch: branch !== null && defaultBranch !== null && branch !== defaultBranch,
 		lastCommit,
 		dirtyCount,
+		stashCount,
+		unpushedCount,
 		dirMtime,
 	};
 }

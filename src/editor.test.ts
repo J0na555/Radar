@@ -27,6 +27,8 @@ function facts(dir: string): RepoFacts {
 		onNonDefaultBranch: false,
 		lastCommit: null,
 		dirtyCount: 0,
+		stashCount: 0,
+		unpushedCount: 0,
 		dirMtime: 0,
 	};
 }

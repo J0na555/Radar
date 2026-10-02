@@ -24,6 +24,8 @@ function facts(overrides: Partial<RepoFacts> = {}): RepoFacts {
 		onNonDefaultBranch: false,
 		lastCommit: daysAgo(1),
 		dirtyCount: 0,
+		stashCount: 0,
+		unpushedCount: 0,
 		dirMtime: NOW - DAY_MS,
 		...overrides,
 	};

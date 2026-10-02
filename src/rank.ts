@@ -17,7 +17,7 @@ export const WEIGHTS = {
 } as const;
 
 /** Days since an ISO date, or null when the date is unparseable/absent. */
-function ageInDays(iso: string | null, now: number): number | null {
+export function ageInDays(iso: string | null, now: number): number | null {
 	if (!iso) return null;
 	const time = Date.parse(iso);
 	if (Number.isNaN(time)) return null;

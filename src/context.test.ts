@@ -220,6 +220,7 @@ describe("buildPrompt", () => {
 		provider: "gemini",
 		commitCount: 20,
 		timeoutSeconds: 120,
+		editorCommand: "",
 		detection: { checkedAt: 0, probes: [], selected: null },
 	};
 

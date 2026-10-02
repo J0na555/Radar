@@ -11,6 +11,7 @@ import {
 	COMMIT_COUNT_MIN,
 } from "./context";
 import { scanProjects } from "./git";
+import { openRepoFolder } from "./editor";
 import { ErrorLog } from "./log-writer";
 import {
 	detectProvidersAsync,
@@ -56,10 +57,31 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	provider: null,
 	commitCount: COMMIT_COUNT_DEFAULT,
 	timeoutSeconds: 120,
+	// Empty means "reveal the folder in the file manager". Auto-detection is
+	// deliberately absent here: see the resolved decision in FEATURE-PLAN.md.
+	editorCommand: "",
 	detection: { checkedAt: 0, probes: [], selected: null },
 };
 
 const RIBBON_TITLE = "Open Project Tracker";
+
+/**
+ * Binaries found on the author's machine, listed as copyable examples.
+ *
+ * A literal list, not a probe and not a ranking. The plugin does not look for
+ * editors at runtime and does not order them: which one you use is not something
+ * a plugin can know, and offering a preference list would be it guessing.
+ */
+const EDITOR_COMMAND_EXAMPLES = ["code", "cursor", "nvim", "vim"];
+
+/**
+ * The working form for a terminal editor, which cannot use `nvim` directly.
+ *
+ * Obsidian has no terminal to hand one, so the terminal emulator goes in this
+ * field and the editor becomes its argument. Spelled out here because it is the
+ * one case where the obvious answer does not work.
+ */
+const TERMINAL_EDITOR_EXAMPLE = "kitty --single-instance --directory";
 
 /** How old a cached probe pass may be before load re-probes, in days. */
 const DETECTION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -316,6 +338,36 @@ export default class ProjectTrackerPlugin extends Plugin {
 		}
 
 		return this.projects;
+	}
+
+	/**
+	 * Open one project's folder in the user's editor, or reveal it.
+	 *
+	 * Two outcomes and neither is an error worth hiding: an empty
+	 * `editorCommand` reveals the folder in the file manager, which is what a
+	 * fresh install does. Refusals name their reason, because a button that
+	 * silently does nothing is the failure users cannot act on.
+	 *
+	 * Nothing here waits on the editor. See `src/editor.ts` for why that is not a
+	 * per-binary decision.
+	 */
+	async openRepoFolder(project: Project): Promise<void> {
+		const name = project.facts.name;
+		const complain = (message: string): void => {
+			new Notice(`Project Tracker: ${message}`, 0);
+		};
+
+		const result = openRepoFolder(project.facts, this.settings.editorCommand, complain);
+		if (!result.ok) {
+			complain(result.error);
+			return;
+		}
+
+		new Notice(
+			result.mode === "editor"
+				? `Project Tracker: opened ${name} in ${result.command}.`
+				: `Project Tracker: revealed ${name} in the file manager.`,
+		);
 	}
 
 	/**
@@ -621,5 +673,22 @@ class ProjectTrackerSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				});
 			});
+
+		containerEl.createEl("h3", { text: "Opening a project" });
+
+		new Setting(containerEl)
+			.setName("Editor command")
+			.setDesc(
+				`What to run when you click the open button on a project. Leave it empty to open the folder in the file manager instead, which is what a fresh install does. Examples: ${EDITOR_COMMAND_EXAMPLES.join(", ")}. A terminal editor needs a terminal to run in, so give the emulator instead: ${TERMINAL_EDITOR_EXAMPLE}. Separate arguments with spaces. Nothing is run through a shell.`,
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.editorCommand)
+					.setValue(this.plugin.settings.editorCommand)
+					.onChange(async (value) => {
+						this.plugin.settings.editorCommand = value.trim();
+						await this.plugin.saveSettings();
+					}),
+			);
 	}
 }

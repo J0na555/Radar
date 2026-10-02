@@ -183,6 +183,16 @@ export interface PluginSettings {
 	commitCount: number;
 	/** Seconds a provider may run before it is killed. */
 	timeoutSeconds: number;
+	/**
+	 * Command that opens a project folder, or "" to reveal the folder in the OS
+	 * file manager instead.
+	 *
+	 * Empty by default and not auto-detected. Which editor someone uses is not a
+	 * fact a plugin can guess, and a ranking of what to try would be a guess. The
+	 * empty case is a real behaviour rather than an error, so a fresh install gets
+	 * something harmless.
+	 */
+	editorCommand: string;
 	/** Cached provider detection, with the time it was taken. */
 	detection: ProviderDetection;
 }

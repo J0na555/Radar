@@ -1,4 +1,4 @@
-import { ItemView, Menu, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Menu, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian";
 import { relativeAge } from "./format";
 import { PluginSettings, Project, ProjectStatus, SummaryState } from "./types";
 import { rankProjects } from "./rank";
@@ -29,6 +29,8 @@ export class ProjectTrackerView extends ItemView {
 			refresh: () => Promise<Project[]>;
 			getProjects: () => Project[];
 			generateSummary: (project: Project) => Promise<SummaryState | null>;
+			/** Hand a project's folder to the configured editor. */
+			openRepoFolder: (project: Project) => Promise<void>;
 			/** Where a failure is recorded, so a notice can name the file. */
 			errorLogSentence: string;
 		},
@@ -154,6 +156,9 @@ export class ProjectTrackerView extends ItemView {
 
 		menu.addSeparator();
 		menu.addItem((item) =>
+			item.setTitle(this.openLabel(project)).setIcon("folder-open").onClick(() => void this.openRepo(project)),
+		);
+		menu.addItem((item) =>
 			item.setTitle("Open note").setIcon("file-text").onClick(() => void this.openNote(project)),
 		);
 		menu.showAtMouseEvent(event);
@@ -249,6 +254,46 @@ export class ProjectTrackerView extends ItemView {
 		return button;
 	}
 
+	/**
+	 * What the open button will do, in words, before it is pressed.
+	 *
+	 * Two different actions share one button, so the label has to say which one
+	 * is currently on offer rather than leaving it to the setting.
+	 */
+	private openLabel(project: Project): string {
+		const editor = this.plugin.settings.editorCommand.trim();
+		return editor
+			? `Open ${project.facts.name} in ${editor.split(/\s+/)[0]}`
+			: `Reveal ${project.facts.name} in the file manager`;
+	}
+
+	/**
+	 * The button that hands the repo folder to the editor.
+	 *
+	 * An icon rather than text, because every row carries one and the panel is a
+	 * list, not a form. Same labelling contract as the summary control: the
+	 * wording goes on both `aria-label` and `title`, so it is reachable without a
+	 * mouse as well as readable on hover.
+	 */
+	private renderOpenControl(project: Project): HTMLElement {
+		const button = this.contentEl.ownerDocument.createElement("button");
+		button.className = "pt-btn pt-open";
+		button.setAttribute("type", "button");
+		const label = this.openLabel(project);
+		button.setAttribute("aria-label", label);
+		button.setAttribute("title", label);
+		setIcon(button, "folder-open");
+		button.addEventListener("click", (event) => {
+			event.stopPropagation();
+			void this.plugin.openRepoFolder(project);
+		});
+		return button;
+	}
+
+	private async openRepo(project: Project): Promise<void> {
+		await this.plugin.openRepoFolder(project);
+	}
+
 	private async openNote(project: Project): Promise<void> {
 		const file = project.notePath ? this.app.vault.getAbstractFileByPath(project.notePath) : null;
 		if (file instanceof TFile) {
@@ -287,6 +332,8 @@ export class ProjectTrackerView extends ItemView {
 		// existing pt-main / pt-right split is unchanged.
 		const ai = right.createSpan({ cls: "pt-ai-slot" });
 		ai.appendChild(this.renderSummaryControl(project));
+		const open = right.createSpan({ cls: "pt-open-slot" });
+		open.appendChild(this.renderOpenControl(project));
 		const score = right.createSpan({ cls: "pt-score" });
 		score.setText(String(project.score.score));
 

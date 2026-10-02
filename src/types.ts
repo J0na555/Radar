@@ -67,6 +67,36 @@ export interface Project {
 	pin: number;
 	/** Absolute vault path of the per-project note, once synced. */
 	notePath?: string;
+	/**
+	 * What is known about the project's AI summary, filled in on every scan.
+	 *
+	 * Absent `summary` means no summary note exists, which is the normal case:
+	 * notes are created only when the user asks for one.
+	 */
+	summary?: SummaryState;
+}
+
+/**
+ * Freshness of a project's AI summary, as read back from the summary note.
+ */
+export interface SummaryState {
+	/** Vault path of the sibling `<name>-ai.md` note. */
+	path: string;
+	/** Generation time recorded in the note, ISO 8601. */
+	generatedAt: string | null;
+	/** Short commit the summary was written from. */
+	commit: string | null;
+	/** Whether the working tree was dirty at generation time. */
+	dirty: boolean;
+	/** Uncommitted file count at generation time. */
+	dirtyCount: number;
+	/**
+	 * True when the repo has moved since the note was written, so the summary
+	 * describes a state that no longer exists.
+	 */
+	stale: boolean;
+	/** Why the summary is stale, for the tooltip. Empty when it is current. */
+	staleReason: string;
 }
 
 /** Plugin-managed frontmatter keys. The note body is never touched. */
@@ -102,6 +132,9 @@ export type FrontmatterPatch = {
 	[K in keyof ProjectFrontmatter]?: ProjectFrontmatter[K] | null;
 };
 
+/** Which local CLI produces the summary. */
+export type ProviderId = "gemini" | "codex" | "opencode";
+
 export interface PluginSettings {
 	/** Absolute path scanned for git repositories. */
 	scanRoot: string;
@@ -109,4 +142,10 @@ export interface PluginSettings {
 	notesFolder: string;
 	/** Show projects with no live work and no commit in the last 30 days. */
 	showDormant: boolean;
+	/** CLI used to generate AI summaries. */
+	provider: ProviderId;
+	/** Recent commits handed to the model as context. */
+	commitCount: number;
+	/** Seconds a provider may run before it is killed. */
+	timeoutSeconds: number;
 }

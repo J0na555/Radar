@@ -1,6 +1,6 @@
 import { ItemView, Menu, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { relativeAge } from "./format";
-import { PluginSettings, Project, ProjectStatus } from "./types";
+import { PluginSettings, Project, ProjectStatus, SummaryState } from "./types";
 import { rankProjects } from "./rank";
 
 export const VIEW_TYPE_PROJECT_TRACKER = "project-tracker-view";
@@ -18,6 +18,8 @@ export class ProjectTrackerView extends ItemView {
 	private projects: Project[] = [];
 	private now = Date.now();
 	private scanning = false;
+	/** Project names with a summary run in flight, so the button cannot double-fire. */
+	private summarizing = new Set<string>();
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -26,6 +28,7 @@ export class ProjectTrackerView extends ItemView {
 			saveSettings: () => Promise<void>;
 			refresh: () => Promise<Project[]>;
 			getProjects: () => Project[];
+			generateSummary: (project: Project) => Promise<SummaryState | null>;
 		},
 	) {
 		super(leaf);
@@ -138,11 +141,105 @@ export class ProjectTrackerView extends ItemView {
 			);
 		}
 
+		if (project.summary) {
+			menu.addItem((item) =>
+				item
+					.setTitle("Open AI summary")
+					.setIcon("bot")
+					.onClick(() => void this.openSummary(project)),
+			);
+		}
+
 		menu.addSeparator();
 		menu.addItem((item) =>
 			item.setTitle("Open note").setIcon("file-text").onClick(() => void this.openNote(project)),
 		);
 		menu.showAtMouseEvent(event);
+	}
+
+	/**
+	 * Run one summary, then redraw.
+	 *
+	 * The in-flight guard is here rather than in the plugin because the button is
+	 * what needs it: a second click while a CLI is running would put two prompts
+	 * and two writes in flight for the same file, and the second would win for no
+	 * reason the user could see.
+	 */
+	private async runSummary(project: Project): Promise<void> {
+		if (this.summarizing.has(project.facts.name)) return;
+		this.summarizing.add(project.facts.name);
+		this.render();
+		try {
+			await this.plugin.generateSummary(project);
+		} catch (error) {
+			// generateSummary handles its own failures; this catches anything that
+			// escapes it so a thrown error never leaves the button stuck on "…".
+			new Notice(`Project Tracker: summary failed for ${project.facts.name} (${String(error)})`, 0);
+		} finally {
+			this.summarizing.delete(project.facts.name);
+			this.render();
+		}
+	}
+
+	private async openSummary(project: Project): Promise<void> {
+		const summary = project.summary;
+		if (!summary) return;
+		const file = this.app.vault.getAbstractFileByPath(summary.path);
+		if (file instanceof TFile) {
+			await this.app.workspace.getLeaf(false).openFile(file);
+			return;
+		}
+		new Notice(`Project Tracker: ${summary.path} is not in the vault any more. Regenerate it.`);
+	}
+
+	/**
+	 * The summary control for one row.
+	 *
+	 * Three states, and the difference between them is the point of the whole
+	 * feature: nothing generated, something generated and current, and something
+	 * generated that the repo has since moved past. A stale summary is the one
+	 * that reads as authoritative while being wrong, so it gets its own wording
+	 * and a warning colour rather than sharing a button with the current case.
+	 */
+	private renderSummaryControl(project: Project): HTMLElement {
+		const summary = project.summary;
+		const running = this.summarizing.has(project.facts.name);
+
+		const label = running
+			? "…"
+			: !summary
+				? "AI"
+				: summary.stale
+					? "stale"
+					: "AI";
+
+		const button = this.contentEl.ownerDocument.createElement("button");
+		button.className = [
+			"pt-btn",
+			"pt-ai",
+			summary?.stale ? "is-stale" : "",
+			!summary ? "is-none" : "",
+		]
+			.filter(Boolean)
+			.join(" ");
+		button.setAttribute("type", "button");
+		button.textContent = label;
+		button.disabled = running;
+
+		let title = summary
+			? `Regenerate AI summary (written ${summary.generatedAt ?? "at an unknown time"} from ${summary.commit ?? "no commit"})`
+			: "Generate an AI summary from git history";
+		if (summary?.stale) {
+			title = `Regenerate AI summary. This one is out of date: ${summary.staleReason}`;
+		}
+		button.setAttribute("aria-label", title);
+		button.setAttribute("title", title);
+		button.addEventListener("click", (event) => {
+			event.stopPropagation();
+			void this.runSummary(project);
+		});
+
+		return button;
 	}
 
 	private async openNote(project: Project): Promise<void> {
@@ -179,6 +276,10 @@ export class ProjectTrackerView extends ItemView {
 			const pin = right.createSpan({ cls: "pt-pin" });
 			pin.setText(`#${project.pin}`);
 		}
+		// The summary control sits with the other row-level controls, so the
+		// existing pt-main / pt-right split is unchanged.
+		const ai = right.createSpan({ cls: "pt-ai-slot" });
+		ai.appendChild(this.renderSummaryControl(project));
 		const score = right.createSpan({ cls: "pt-score" });
 		score.setText(String(project.score.score));
 

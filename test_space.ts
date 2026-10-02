@@ -1,0 +1,15 @@
+import {buildGitContext} from './src/context.ts';
+import {spawnSync} from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-ctx-')));
+spawnSync('git',['init','-q'],{cwd:dir});
+spawnSync('git',['config','user.email','test@example.com'],{cwd:dir});
+spawnSync('git',['config','user.name','Test'],{cwd:dir});
+fs.writeFileSync(path.join(dir, 'my notes.md'), 'x');
+spawnSync('git',['add','.'],{cwd:dir});
+spawnSync('git',['commit','-qm','init'],{cwd:dir});
+const facts = {path:dir,name:path.basename(dir),root:path.dirname(dir),gitReadable:true,remote:'git@github.com:owner/repo.git',github:'owner/repo',branch:'main',defaultBranch:'main',onNonDefaultBranch:false,lastCommit:'2026-10-01T09:00:00+03:00',dirtyCount:0,dirMtime:Date.now()};
+const ctx = buildGitContext(facts,20);
+console.log(JSON.stringify(ctx.dirtyFiles));

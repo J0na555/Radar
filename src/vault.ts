@@ -1,15 +1,12 @@
 import { App, TFile, TFolder, normalizePath } from "obsidian";
 import { applyFrontmatterPatch, desiredFrontmatter, diffManaged } from "./frontmatter";
-import { PluginSettings, ProjectFrontmatter, RepoFacts, ScoreResult } from "./types";
+import { spawnSync } from "child_process";
+import { aiNotePath, sanitizeBase, stateFromFrontmatter, SummaryFrontmatter } from "./summary";
+import { PluginSettings, Project, ProjectFrontmatter, RepoFacts, ScoreResult, SummaryState } from "./types";
 
 /** Map a project name to a safe note filename. */
 export function noteFileName(projectName: string): string {
-	const safe = projectName
-		.replace(/[\\/:*?"<>|]/g, "-")
-		.replace(/-{2,}/g, "-")
-		.replace(/^-+|-+$/g, "")
-		.trim();
-	return `${safe || "untitled"}.md`;
+	return `${sanitizeBase(projectName) || "untitled"}.md`;
 }
 
 /** Absolute vault-relative path of a project's note. */
@@ -132,4 +129,71 @@ export async function syncAllNotes(
 		if (path) written.set(entry.facts.name, path);
 	}
 	return written;
+}
+
+/**
+ * Write one AI summary note, replacing whatever was there.
+ *
+ * The whole file is replaced rather than merged, because a summary note holds
+ * only machine output and a freshness stamp. Nothing the user could have written
+ * in it survives regeneration, and that is intended: the note is a cache of a
+ * model call, not a document. The project note is never a target here.
+ *
+ * Returns the path, or null when the write failed.
+ */
+export async function writeSummaryNote(
+	app: App,
+	settings: PluginSettings,
+	projectName: string,
+	content: string,
+): Promise<string | null> {
+	await ensureFolder(app, settings.notesFolder);
+	const target = aiNotePath(settings, projectName);
+	const existing = app.vault.getAbstractFileByPath(target);
+
+	try {
+		if (existing instanceof TFile) await app.vault.modify(existing, content);
+		else await app.vault.create(target, content);
+	} catch {
+		return null;
+	}
+	return target;
+}
+
+/** Short HEAD sha for a repo, used to judge whether a summary has gone stale. */
+function headSha(repoPath: string): string | null {
+	const res = spawnSync("git", ["rev-parse", "--short", "HEAD"], {
+		cwd: repoPath,
+		encoding: "utf8",
+		windowsHide: true,
+	});
+	if (res.error || res.status !== 0) return null;
+	return res.stdout.trim() || null;
+}
+
+/**
+ * Read every existing summary note's state back out of frontmatter.
+ *
+ * Reads only, and only for notes that already exist. The 45 notes this plugin
+ * could generate do not get generated here: a project with no summary is absent
+ * from the map, and the panel shows that as "none", which is the normal case.
+ */
+export async function readSummaryStates(
+	app: App,
+	settings: PluginSettings,
+	projects: Project[],
+): Promise<Map<string, SummaryState>> {
+	const states = new Map<string, SummaryState>();
+
+	for (const project of projects) {
+		const path = aiNotePath(settings, project.facts.name);
+		const file = app.vault.getAbstractFileByPath(path);
+		if (!(file instanceof TFile)) continue;
+
+		const fm = app.metadataCache.getFileCache(file)?.frontmatter as SummaryFrontmatter | undefined;
+		const state = stateFromFrontmatter(fm, path, project.facts, headSha(project.facts.path));
+		if (state) states.set(project.facts.name, state);
+	}
+
+	return states;
 }

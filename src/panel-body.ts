@@ -30,6 +30,8 @@ export interface PanelBodyOptions {
 	now: number;
 	/** Project names with a summary in flight, so their control is disabled. */
 	summarizing: ReadonlySet<string>;
+	/** Put the keyboard selection on a row the user clicked. */
+	onSelect: (index: number, project: Project) => void;
 	onOpenNote: (project: Project) => void;
 	onRunSummary: (project: Project) => void;
 	onOpenEditor: (project: Project) => void;
@@ -88,6 +90,10 @@ function drawRow(
 		editorLabel: options.editorLabel(project),
 		now: options.now,
 		summarizing: options.summarizing.has(project.facts.name),
+		// The index is this row's place in the visible list, which is what the selection
+		// is an index into. Row order and selection order are the same order here
+		// because every row comes out of `group.rows` in display order.
+		onSelect: () => options.onSelect(index, project),
 		onOpenNote: options.onOpenNote,
 		onRunSummary: options.onRunSummary,
 		onOpenEditor: options.onOpenEditor,

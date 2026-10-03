@@ -15,8 +15,13 @@
  * be tested: an event aimed at an input is ignored, and so is any event carrying a
  * modifier. Unrecognised keys never reach a binding in the first place, since the
  * table below is the complete list of keys this panel claims.
+ *
+ * `Scope` is imported as a type on purpose. Nothing here constructs one: the view
+ * owns the scope and hands it over, so this file has no runtime dependency on
+ * `obsidian` and `node --test` can drive the handlers with a stub. See
+ * `panel-keys.test.ts`.
  */
-import { Scope } from "obsidian";
+import type { Scope } from "obsidian";
 import type { KeymapEventHandler } from "obsidian";
 import { KEY_BINDINGS, shouldIgnoreKey } from "./keys.ts";
 import type { PanelAction } from "./keys.ts";

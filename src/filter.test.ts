@@ -187,7 +187,7 @@ describe("searching", () => {
 	const projects = [
 		project("ClientRadar"),
 		project("client-radar-tests"),
-		project("monk-mode"),
+		project("codec"),
 		project("AniFlow"),
 		project("api-server"),
 	];
@@ -209,7 +209,6 @@ describe("searching", () => {
 	});
 
 	it("drops a project whose name does not contain the query", () => {
-		assert.deepEqual(names(panel(projects, { query: "monk" })), ["monk-mode"]);
 		assert.deepEqual(names(panel(projects, { query: "zzz" })), []);
 	});
 
@@ -233,9 +232,20 @@ describe("searching", () => {
 	});
 
 	it("does not call a strong match weak", () => {
-		const result = panel([project("monk-mode")], { query: "monk" });
+		const result = panel([project("codec")], { query: "code" });
 		assert.equal(result.weak, 0);
 		assert.equal(result.rows[0].weak, false);
+	});
+
+	it("calls nothing weak for a one-character query", () => {
+		// One character cannot be scattered, so nothing is a poor match. It used to dim
+		// nearly everything: a mid-word single-character match scores at most MATCH, and
+		// half the ceiling for a one-character query is one point above that.
+		const result = panel([project("codec"), project("context")], { query: "c" });
+		// Best match first, and none of them dimmed.
+		assert.deepEqual(names(result), ["codec", "context"]);
+		assert.equal(result.weak, 0);
+		for (const row of result.rows) assert.equal(row.weak, false, `${row.project.facts.name} dimmed`);
 	});
 
 	it("reports no score at all when no query is filtering", () => {

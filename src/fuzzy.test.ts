@@ -189,16 +189,39 @@ describe("weak matches", () => {
 	});
 
 	it("thresholds at the documented ratio of the best possible score", () => {
-		// A one-letter query has almost no room to be scattered, and a seven-letter
-		// one has plenty, which is why the threshold scales instead of being a
-		// fixed number.
-		assert.equal(weakMatchThreshold("a"), bestPossibleScore("a") * WEAK_MATCH_RATIO);
-		assert.ok(weakMatchThreshold("dashboard") > weakMatchThreshold("d"));
+		// The best possible score grows with the query, so the threshold scales instead
+		// of being a fixed number: a seven-letter query can be scattered a lot and still
+		// be right, and a two-letter one cannot.
+		assert.equal(weakMatchThreshold("cr"), bestPossibleScore("cr") * WEAK_MATCH_RATIO);
+		assert.ok(weakMatchThreshold("dashboard") > weakMatchThreshold("cr"));
 	});
 
-	it("keeps the threshold above zero for every non-empty query", () => {
-		// Otherwise a one-letter query would make every match weak.
-		for (const query of ["a", "d", "cr", "api"]) {
+	it("has no weak threshold at all for a one-character query", () => {
+		// One character has no alignment to be bad at, and the ratio cannot say so: a
+		// single character earns no consecutive bonus, so the whole ceiling is
+		// FIRST_BOUNDARY + MATCH = 34 and half of it is 17, which is one point above
+		// MATCH = 16, the most a mid-word match can score. Every one of these names used
+		// to come out dimmed by that one point.
+		assert.equal(weakMatchThreshold("c"), 0);
+		assert.equal(weakMatchThreshold(""), 0);
+		assert.equal(weakMatchThreshold("   "), 0);
+		const OLD_THRESHOLD_FOR_ONE_LETTER = 17;
+		for (const [query, name] of [
+			["c", "hcode"],
+			["d", "adta"],
+			["k", "aeky"],
+		] as const) {
+			assert.ok(
+				score(query, name) < OLD_THRESHOLD_FOR_ONE_LETTER,
+				`${query} in ${name} should score under the old threshold`,
+			);
+		}
+	});
+
+	it("keeps the threshold above zero for every query of two characters or more", () => {
+		// Otherwise a two-letter query would make every match weak, which is the same
+		// failure the one-character exemption exists to stop.
+		for (const query of ["cr", "db", "api"]) {
 			assert.ok(weakMatchThreshold(query) > 0, `zero threshold for ${query}`);
 		}
 	});

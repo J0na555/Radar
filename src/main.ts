@@ -41,7 +41,7 @@ import {
 	RepoFacts,
 	SummaryState,
 } from "./types";
-import { readPins, readPreviousDirty, readSummaryStates, syncAllNotes, syncProjectNote, writeSummaryNote } from "./vault";
+import { readPins, readPreviousDirty, readSummaryStates, syncAllNotes, writePin, writeSummaryNote } from "./vault";
 import { renderWeightSettings } from "./weight-settings";
 import {
 	ICON_PROJECT_TRACKER,
@@ -319,12 +319,18 @@ export default class ProjectTrackerPlugin extends Plugin {
 	 * a panel the user had just asked to make easier to use. The pin is one field of
 	 * one note, so it is written on its own and the panel re-ranks in memory.
 	 *
+	 * `writePin` patches `pinned` and nothing else. An earlier version went through
+	 * `syncProjectNote`, which recomputes every managed key, and that quietly rewrote
+	 * `last_commit_rel` too: it is an age measured against `Date.now()`, so the pin
+	 * write computed it against a later clock than the scan had and restated it. The
+	 * scan owns that key.
+	 *
 	 * Returns whether the write landed. The view draws the new pin before calling
 	 * this and puts it back if it comes back false, so a pin that silently did not
 	 * save cannot be left on screen.
 	 */
 	async savePin(project: Project): Promise<boolean> {
-		const path = await syncProjectNote(this.app, this.settings, project.facts, project.score, project.pin);
+		const path = await writePin(this.app, this.settings, project);
 		if (path !== null) {
 			if (!project.notePath) {
 				project.notePath = path;

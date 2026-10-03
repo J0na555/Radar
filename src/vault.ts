@@ -145,6 +145,47 @@ export async function syncProjectNote(
 }
 
 /**
+ * Write one project's pin into its note, and nothing else.
+ *
+ * Exists because `syncProjectNote` recomputes every managed key, and one of them
+ * cannot be recomputed the same way twice: `last_commit_rel` is an age measured
+ * against `Date.now()`, so a pin written five minutes after the scan computes a
+ * different string than the scan did and rewrites the key. Pinning one project used
+ * to quietly restate how old its last commit was, which is the scan's job and
+ * carries a value from a different clock than the rest of the note.
+ *
+ * So the pin write patches `pinned` alone. Everything else in the frontmatter is
+ * left for the next scan, which is the thing that owns it. A project with no note yet
+ * still gets a whole one written, because there is nothing to patch and a created note
+ * has to be complete.
+ *
+ * Returns the note path, or null when the write failed.
+ */
+export async function writePin(app: App, settings: PluginSettings, project: Project): Promise<string | null> {
+	await ensureFolder(app, settings.notesFolder);
+	const target = notePath(settings, project.facts.name);
+	const existing = app.vault.getAbstractFileByPath(target);
+
+	// No note yet: create it whole, so every key the plugin manages exists from the
+	// start rather than trickling in over the next scan.
+	if (!(existing instanceof TFile)) {
+		return syncProjectNote(app, settings, project.facts, project.score, project.pin);
+	}
+
+	try {
+		await app.fileManager.processFrontMatter(existing, (fm) => {
+			// Written rather than routed through `diffManaged`, whose whole job is
+			// comparing a freshly computed set of keys against the note. Here there is
+			// one key and one value, and the value is not computed at all.
+			(fm as Record<string, unknown>).pinned = project.pin > 0 ? project.pin : 0;
+		});
+	} catch {
+		return null;
+	}
+	return target;
+}
+
+/**
  * Write a batch of notes sequentially.
  *
  * Sequential rather than parallel on purpose: `processFrontMatter` reads and

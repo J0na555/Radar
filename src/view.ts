@@ -30,6 +30,12 @@ export class ProjectTrackerView extends ItemView {
 	private scanning = false;
 	/** Project names with a summary run in flight, so the button cannot double-fire. */
 	private summarizing = new Set<string>();
+	/**
+	 * The tail of each project's pin writes, by project name. See `queuePin`.
+	 *
+	 * Cleared on close so a closed view holds no promise from a panel that is gone.
+	 */
+	private pinWrites = new Map<string, Promise<void>>();
 
 	/**
 	 * The parts of the filter the view owns.
@@ -43,21 +49,12 @@ export class ProjectTrackerView extends ItemView {
 	private selectedName: string | null = null;
 	private selectedIndex = NO_SELECTION;
 	/**
-	 * What the panel was last scrolled to, so a re-render does not yank it.
-	 *
-	 * The project's name rather than its index, because filtering can replace the row
-	 * at an index without the selection having moved: the user was on "api" at index 3,
-	 * typed a query that hid it, and "client" landed at index 3. Same index, different
-	 * row, and the new one has never been scrolled to.
-	 */
-	/**
 	 * What is on screen, in display order.
 	 *
 	 * The project and its element in one entry, because the selection is an index
 	 * into this list and two parallel arrays would be two things to keep in step.
 	 */
 	private visible: { row: FilterRow; el: HTMLElement }[] = [];
-
 
 	private header: PanelHeader | null = null;
 	private keyHandlers: KeymapEventHandler[] = [];
@@ -94,6 +91,8 @@ export class ProjectTrackerView extends ItemView {
 		unbindPanelKeys(this.scope, this.keyHandlers);
 		this.keyHandlers = [];
 		this.scope = null;
+		this.pinWrites.clear();
+		this.summarizing.clear();
 		this.header?.destroy();
 		this.header = null;
 		this.visible = [];
@@ -120,6 +119,7 @@ export class ProjectTrackerView extends ItemView {
 		// appearing to hang for a fifth of a second.
 		this.render();
 		try {
+			await this.settlePinWrites();
 			await this.plugin.refresh();
 			this.projects = this.plugin.getProjects();
 			this.now = Date.now();
@@ -196,6 +196,7 @@ export class ProjectTrackerView extends ItemView {
 			editorLabel: (project) => editorActionLabel(project.facts.name, this.plugin.settings.editorCommand),
 			now: this.now,
 			summarizing: this.summarizing,
+			onSelect: (index, project) => this.selectRow(index, project),
 			onOpenNote: (project) => void openProjectNote(this.app, project),
 			onRunSummary: (project) => void this.runSummary(project),
 			onOpenEditor: (project) => void this.plugin.openRepoFolder(project),
@@ -299,6 +300,24 @@ export class ProjectTrackerView extends ItemView {
 		this.render();
 	}
 
+	/**
+	 * Put the selection on a row the user clicked.
+	 *
+	 * One notion of the current row, deliberately. Clicking a row's name used to open
+	 * its note and leave the highlight where it was, so the panel had two: this one,
+	 * which `j`, `Enter`, `s` and `p` act on, and whichever was last clicked. Click a
+	 * row, press `s`, and the summary ran somewhere else.
+	 *
+	 * Both fields are set rather than leaving `render` to reconcile them. The click
+	 * happens on an element that `render` is about to replace, and the index is the
+	 * row's own, so there is nothing to reconcile.
+	 */
+	private selectRow(index: number, project: Project): void {
+		this.selectedIndex = index;
+		this.selectedName = project.facts.name;
+		this.render();
+	}
+
 	private clearFilters(): void {
 		const next = nextStateOnEscape(this.filterState());
 		// showDormant is not copied across: it is the persisted setting, and `Esc` is
@@ -309,7 +328,24 @@ export class ProjectTrackerView extends ItemView {
 	}
 
 	/**
-	 * Set a project's pin rank and persist it, without rescanning anything.
+	 * Queue a pin write for one project, behind whatever is already writing it.
+	 *
+	 * `target` is a function rather than a rank because the write is queued: a `p`
+	 * pressed twice has to read the rank the first press left, not the one that was on
+	 * screen when the second key went down.
+	 */
+	private queuePin(project: Project, target: () => number): Promise<void> {
+		const name = project.facts.name;
+		const queued = (this.pinWrites.get(name) ?? Promise.resolve()).then(() => this.writePin(project, target()));
+		// The stored tail must never reject. A rejected one would leave the next pin for
+		// this project queued behind a promise that never settles, so it would silently
+		// never run. `writePin` reports its own failures to the user.
+		this.pinWrites.set(name, queued.catch(() => {}));
+		return queued;
+	}
+
+	/**
+	 * One pin write: draw it, write it, and put the row back if the write failed.
 	 *
 	 * This used to call `refresh`, which forked a `git` process per repository and
 	 * rewrote every note to store one integer, on a panel that had just been told to
@@ -318,8 +354,19 @@ export class ProjectTrackerView extends ItemView {
 	 *
 	 * The row is drawn before the write and put back if the write fails, so what the
 	 * user sees either matches the note or says why it does not.
+	 *
+	 * Only ever reached with the previous write for this project already settled, so
+	 * `previous` is the rank the last write actually landed rather than the rank that
+	 * happened to be on screen when this one was queued. That is what makes the
+	 * rollback safe: there is no newer write in flight for it to overwrite.
+	 *
+	 * Two writes for one project used to interleave, and the first one's rollback could
+	 * land after the second one succeeded: a pin at 1 opening while a pin at 2 was
+	 * already in flight, the 2 landed, the rollback put the row back at 0, and the note
+	 * said 2. Queued in order instead, every outcome leaves the panel and the note
+	 * saying the same thing, including both writes failing.
 	 */
-	private async setPin(project: Project, pin: number): Promise<void> {
+	private async writePin(project: Project, pin: number): Promise<void> {
 		const previous = project.pin;
 		project.pin = pin;
 		this.render();
@@ -333,14 +380,33 @@ export class ProjectTrackerView extends ItemView {
 	}
 
 	/**
+	 * Wait until no pin write is in flight.
+	 *
+	 * `refresh` reads every pin back out of the notes, so a write that has not landed
+	 * yet is read as absent: the rescan replaces the project objects the write is
+	 * holding, and the panel ends up showing the note's old rank while that write then
+	 * succeeds. Settling first means no write is ever in flight across a rescan.
+	 *
+	 * Loops because a pin can be queued while the first batch is being awaited, and one
+	 * snapshot would leave that write racing the scan. It settles as soon as the user
+	 * stops pinning; holding `p` down keeps the rescan waiting, which is the right way
+	 * round.
+	 */
+	private async settlePinWrites(): Promise<void> {
+		while (this.pinWrites.size > 0) {
+			await Promise.all(this.pinWrites.values());
+		}
+	}
+
+	/**
 	 * `p` on a row: pin it above everything else, or unpin it if it is already pinned.
 	 *
 	 * `topPinRank` is the highest rank a pin can take, so this lands in the pinned
 	 * group at the front of it. When something is already pinned at rank 1 the new
 	 * pin ties it and score order decides, which is what the menu's "Move up" is for.
 	 */
-	private async togglePin(project: Project): Promise<void> {
-		await this.setPin(project, project.pin > 0 ? 0 : topPinRank(this.projects));
+	private togglePin(project: Project): Promise<void> {
+		return this.queuePin(project, () => (project.pin > 0 ? 0 : topPinRank(this.projects)));
 	}
 
 	/**
@@ -411,7 +477,7 @@ export class ProjectTrackerView extends ItemView {
 	/** Everything the right-click menu can do, apart from the one label it needs. */
 	private pinMenuActions(): Omit<PinMenuActions, "editorLabel"> {
 		return {
-			onPin: (project, pin) => void this.setPin(project, pin),
+			onPin: (project, pin) => void this.queuePin(project, () => pin),
 			topRank: topPinRank(this.projects),
 			onOpenSummary: (project) => void openSummaryNote(this.app, project),
 			onOpenEditor: (project) => void this.plugin.openRepoFolder(project),

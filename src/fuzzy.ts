@@ -51,10 +51,12 @@ const SLACK = 1;
  * How far below the best possible score a match may fall and still count as weak.
  *
  * A ratio rather than a fixed number, because the best possible score grows with
- * the query: a one-letter query has almost no room to be scattered, and a
- * seven-letter one can be scattered a lot without being wrong. Half is chosen
- * because at half, every match still has to be contiguous-ish, land on a word
- * start, or both.
+ * the query: a two-letter query has little room to be scattered, and a seven-letter
+ * one can be scattered a lot without being wrong. Half is chosen because at half,
+ * every match still has to be contiguous-ish, land on a word start, or both.
+ *
+ * Applies from two characters up. `weakMatchThreshold` exempts the one-character
+ * query, where this ratio works against itself.
  */
 export const WEAK_MATCH_RATIO = 0.5;
 
@@ -75,6 +77,18 @@ export function bestPossibleScore(query: string): number {
 
 /** Score below which a match is too scattered to deserve a full-strength row. */
 export function weakMatchThreshold(query: string): number {
+	const length = query.trim().length;
+	// A one-character query is exempt, and it has to be. There is no alignment to
+	// judge when there is one character: the name contains it or it does not. Worse,
+	// the ratio inverts for such a query. A single character earns no consecutive
+	// bonus, so its entire ceiling is FIRST_BOUNDARY + MATCH, and half of that sits
+	// one point above MATCH itself. Every mid-word single-character match scores at
+	// most MATCH, so every one of them was dimmed however good it was, and typing "c"
+	// greyed out almost the whole panel by construction.
+	//
+	// Rows still sort best match first, so the ordering carries the quality the dimming
+	// used to; they just are not all dimmed.
+	if (length <= 1) return 0;
 	return bestPossibleScore(query) * WEAK_MATCH_RATIO;
 }
 

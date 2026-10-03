@@ -38,6 +38,14 @@ export interface ProjectRowOptions {
 	now: number;
 	/** A summary is running for this project, so its control is disabled. */
 	summarizing: boolean;
+	/**
+	 * Put the keyboard selection on this row.
+	 *
+	 * Separate from the row's own actions because selecting is not acting: clicking a
+	 * name selects the row and opens its note, and the highlight has to move either
+	 * way, or the panel ends up with two different notions of "the row I am on".
+	 */
+	onSelect: () => void;
 	onOpenNote: (project: Project) => void;
 	onRunSummary: (project: Project) => void;
 	onOpenEditor: (project: Project) => void;
@@ -76,7 +84,15 @@ export function createProjectRow(doc: Document, options: ProjectRowOptions): HTM
 	const name = doc.createElement("div");
 	name.className = "pt-name";
 	name.textContent = project.facts.name;
-	name.addEventListener("click", () => options.onOpenNote(project));
+	// The mouse equivalent of moving the cursor here and pressing Enter, and it has to
+	// select as well as open. Otherwise the panel carries two ideas of the current row:
+	// the highlighted one, which `j`, `Enter`, `s` and `p` all act on, and the one the
+	// user last clicked. They drift apart the moment somebody clicks a row and then
+	// presses `s`.
+	name.addEventListener("click", () => {
+		options.onSelect();
+		options.onOpenNote(project);
+	});
 	main.appendChild(name);
 
 	const meta = doc.createElement("div");

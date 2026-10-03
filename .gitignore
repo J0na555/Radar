@@ -4,3 +4,7 @@ main.js.map
 *.tgz
 .DS_Store
 data.json
+
+# Working notes, not source. Tracked until 2026-10-03; untracked so it stops
+# showing up in diffs and never reaches anyone else's clone.
+FEATURE-PLAN.md

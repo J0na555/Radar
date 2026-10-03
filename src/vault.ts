@@ -31,11 +31,9 @@ export async function ensureFolder(app: App, folder: string): Promise<void> {
 }
 
 /**
- * Every existing project note's managed frontmatter, keyed by project name.
- *
- * One walk of the notes folder, shared by the readers below. A project with no
- * note is simply absent, which is the normal case for anything the user never
- * touched.
+ * Every existing project note's managed frontmatter, keyed by project name. One walk of the
+ * notes folder, shared by the readers below. A project with no note is simply absent, which is
+ * the normal case for anything the user never touched.
  */
 function readNoteFrontmatter(app: App, settings: PluginSettings): Map<string, ProjectFrontmatter> {
 	const notes = new Map<string, ProjectFrontmatter>();
@@ -52,10 +50,8 @@ function readNoteFrontmatter(app: App, settings: PluginSettings): Map<string, Pr
 }
 
 /**
- * Read the user's pin rank from every existing project note.
- *
- * Returns a map of project name to pin. A project with no note, or a note with
- * no numeric `pinned`, is absent from the map and treated as unpinned.
+ * Read the user's pin rank from every existing project note. A project with no note, or a note
+ * with no numeric `pinned`, is absent from the map and treated as unpinned.
  */
 export async function readPins(app: App, settings: PluginSettings): Promise<Map<string, number>> {
 	const pins = new Map<string, number>();
@@ -67,16 +63,13 @@ export async function readPins(app: App, settings: PluginSettings): Promise<Map<
 }
 
 /**
- * Read the dirty file count each project had at the previous scan.
+ * Read the dirty file count each project had at the previous scan. `dirty` is written on every
+ * scan, so this is the memory the "sustained dirty" warning reads instead of a history file of
+ * its own. Absent means "no history", which the warning treats as nothing to say.
  *
- * `dirty` is written on every scan, so this is the memory the "sustained dirty"
- * warning reads instead of a history file of its own. A project with no note, no
- * `dirty` key, or a value that is not a number is absent, and absent means "no
- * history", which the warning treats as nothing to say.
- *
- * Must be read before `syncAllNotes` runs in the same scan, or it reads the
- * value this scan just wrote and every repo looks like it has been dirty for a
- * while. `main.refresh` orders the two for exactly that reason.
+ * Must be read before `syncAllNotes` runs in the same scan, or it reads the value this scan
+ * just wrote and every repo looks like it has been dirty for a while. `main.refresh` orders
+ * the two for exactly that reason.
  */
 export async function readPreviousDirty(app: App, settings: PluginSettings): Promise<Map<string, number>> {
 	const counts = new Map<string, number>();
@@ -90,9 +83,9 @@ export async function readPreviousDirty(app: App, settings: PluginSettings): Pro
 /**
  * Create or update one project's note.
  *
- * Only the managed frontmatter keys are written. The body is never read,
- * rewritten, or removed: `processFrontMatter` rewrites the YAML block in place
- * and leaves every byte after the closing delimiter untouched.
+ * Only the managed frontmatter keys are written. The body is never read, rewritten or removed:
+ * `processFrontMatter` rewrites the YAML block in place and leaves every byte after the
+ * closing delimiter untouched.
  *
  * Returns the note path, or null when the note could not be written.
  */
@@ -147,36 +140,31 @@ export async function syncProjectNote(
 /**
  * Write one project's pin into its note, and nothing else.
  *
- * Exists because `syncProjectNote` recomputes every managed key, and one of them
- * cannot be recomputed the same way twice: `last_commit_rel` is an age measured
- * against `Date.now()`, so a pin written five minutes after the scan computes a
- * different string than the scan did and rewrites the key. Pinning one project used
- * to quietly restate how old its last commit was, which is the scan's job and
- * carries a value from a different clock than the rest of the note.
+ * Exists because `syncProjectNote` recomputes every managed key, and one of them cannot be
+ * recomputed the same way twice: `last_commit_rel` is an age measured against `Date.now()`,
+ * so a pin written five minutes after the scan computes a different string than the scan
+ * did and rewrites the key. Pinning one project used to quietly restate how old its last
+ * commit was.
  *
- * So the pin write patches `pinned` alone. Everything else in the frontmatter is
- * left for the next scan, which is the thing that owns it. A project with no note yet
- * still gets a whole one written, because there is nothing to patch and a created note
- * has to be complete.
- *
- * Returns the note path, or null when the write failed.
+ * So the pin write patches `pinned` alone. Everything else is left for the next scan, which
+ * is the thing that owns it. A project with no note yet still gets a whole one written,
+ * because there is nothing to patch and a created note has to be complete.
  */
 export async function writePin(app: App, settings: PluginSettings, project: Project): Promise<string | null> {
 	await ensureFolder(app, settings.notesFolder);
 	const target = notePath(settings, project.facts.name);
 	const existing = app.vault.getAbstractFileByPath(target);
 
-	// No note yet: create it whole, so every key the plugin manages exists from the
-	// start rather than trickling in over the next scan.
+	// No note yet: create it whole, so every key the plugin manages exists from the start.
 	if (!(existing instanceof TFile)) {
 		return syncProjectNote(app, settings, project.facts, project.score, project.pin);
 	}
 
 	try {
 		await app.fileManager.processFrontMatter(existing, (fm) => {
-			// Written rather than routed through `diffManaged`, whose whole job is
-			// comparing a freshly computed set of keys against the note. Here there is
-			// one key and one value, and the value is not computed at all.
+			// Written rather than routed through `diffManaged`, whose whole job is comparing a freshly
+			// computed set of keys against the note. Here there is one key and one value, and the
+			// value is not computed at all.
 			(fm as Record<string, unknown>).pinned = project.pin > 0 ? project.pin : 0;
 		});
 	} catch {
@@ -186,11 +174,9 @@ export async function writePin(app: App, settings: PluginSettings, project: Proj
 }
 
 /**
- * Write a batch of notes sequentially.
- *
- * Sequential rather than parallel on purpose: `processFrontMatter` reads and
- * rewrites the same files Obsidian is tracking, and interleaved writes against
- * one vault produce flaky results.
+ * Write a batch of notes sequentially. Sequential rather than parallel on purpose:
+ * `processFrontMatter` reads and rewrites the same files Obsidian is tracking, and interleaved
+ * writes against one vault produce flaky results.
  */
 export async function syncAllNotes(
 	app: App,
@@ -207,14 +193,10 @@ export async function syncAllNotes(
 }
 
 /**
- * Write one AI summary note, replacing whatever was there.
- *
- * The whole file is replaced rather than merged, because a summary note holds
- * only machine output and a freshness stamp. Nothing the user could have written
- * in it survives regeneration, and that is intended: the note is a cache of a
- * model call, not a document. The project note is never a target here.
- *
- * Returns the path, or null when the write failed.
+ * Write one AI summary note, replacing whatever was there. The whole file is replaced rather
+ * than merged, because a summary note holds only machine output and a freshness stamp.
+ * Nothing the user could have written in it survives regeneration, and that is intended: the
+ * note is a cache of a model call, not a document. The project note is never a target here.
  */
 export async function writeSummaryNote(
 	app: App,
@@ -247,11 +229,9 @@ function headSha(repoPath: string): string | null {
 }
 
 /**
- * Read every existing summary note's state back out of frontmatter.
- *
- * Reads only, and only for notes that already exist. The 45 notes this plugin
- * could generate do not get generated here: a project with no summary is absent
- * from the map, and the panel shows that as "none", which is the normal case.
+ * Read every existing summary note's state back out of frontmatter. Reads only, and only for
+ * notes that already exist. The 45 notes this plugin could generate do not get generated here:
+ * a project with no summary is absent from the map, and the panel shows that as "none".
  */
 export async function readSummaryStates(
 	app: App,

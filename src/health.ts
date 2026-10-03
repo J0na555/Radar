@@ -1,15 +1,11 @@
 /**
  * Cheap health signals about a repo, for the ones worth warning about.
  *
- * Every signal here costs one extra git call at most, and none of them is a
- * judgement about the work. They are the things that are easy to forget: an
- * uncommitted pile that has survived more than one scan, a branch nobody has
- * touched since it was cut, work somebody deliberately parked in a stash, work
- * that exists on exactly one machine.
+ * Every signal here costs one extra git call at most, and none of them is a judgement about the
+ * work. They are the things that are easy to forget.
  *
- * A signal that always fires is noise, so each of these has to be a condition
- * rather than a fact. If the panel is showing the same badge on every row, the
- * badge is wrong.
+ * A signal that always fires is noise, so each of these has to be a condition rather than a
+ * fact. If the panel is showing the same badge on every row, the badge is wrong.
  *
  * No `obsidian` import, so `node --test` loads this directly.
  */
@@ -20,9 +16,8 @@ import type { HealthSignal, RepoFacts } from "./types.ts";
 /**
  * Uncommitted files that count as a pile rather than a day's work.
  *
- * 32, because that is where the scoring curve already saturates: past this many
- * files the score stops rewarding more, so the warning starts exactly where the
- * ranking has stopped caring. One constant, two features, no second opinion.
+ * 32, because that is where the scoring curve already saturates: the warning starts exactly
+ * where the ranking has stopped caring.
  */
 export const SUSTAINED_DIRTY_THRESHOLD = 32;
 
@@ -41,17 +36,15 @@ function count(count: number, singular: string, pluralForm: string): string {
 /**
  * A working tree that was already a pile last scan.
  *
- * Two scans, not a time series. The previous scan's dirty count is already
- * persisted in the project note's `dirty` frontmatter, written on every scan, so
- * "sustained" costs nothing extra to detect and no history file has to exist.
- * That also bounds the claim honestly: it means "this has survived at least one
- * scan", which for a panel scanned every morning is a week, and for one opened
- * once a month is a day. Neither is worse than what the alternative would cost.
+ * Two scans, not a time series. The previous scan's dirty count is already persisted in the
+ * project note's `dirty` frontmatter, written on every scan, so "sustained" costs nothing
+ * extra to detect and no history file has to exist. That bounds the claim honestly: it means
+ * "this has survived at least one scan".
  */
 function sustainedDirty(facts: RepoFacts, previousDirtyCount: number | null): HealthSignal | null {
 	if (facts.dirtyCount < SUSTAINED_DIRTY_THRESHOLD) return null;
-	// No recorded previous count means this is the first scan that has seen this
-	// repo, which is not evidence of anything.
+	// No recorded previous count means this is the first scan that has seen this repo, which is
+	// not evidence of anything.
 	if (previousDirtyCount === null || previousDirtyCount < SUSTAINED_DIRTY_THRESHOLD) return null;
 
 	return {
@@ -82,11 +75,9 @@ function longLivedBranch(facts: RepoFacts, now: number): HealthSignal | null {
 }
 
 /**
- * Work parked in a stash.
- *
- * A stash is a deliberate act, which is exactly why it gets forgotten: nothing
- * in the working tree changes, no branch points at it, and the only sign is the
- * reflog. One repo on this machine has one.
+ * Work parked in a stash. A stash is a deliberate act, which is exactly why it gets forgotten:
+ * nothing in the working tree changes, no branch points at it, and the only sign is the
+ * reflog.
  */
 function stashedWork(facts: RepoFacts): HealthSignal | null {
 	// null means the probe failed, which is not evidence of a clean stash list.
@@ -102,9 +93,9 @@ function stashedWork(facts: RepoFacts): HealthSignal | null {
 /**
  * Commits that exist on this machine and nowhere else.
  *
- * The one signal with no real example to point at: nothing on this machine is
- * unpushed today, so this has never fired here. It is cheap, so it ships, but it
- * is the part of this feature that should be watched rather than trusted.
+ * The one signal with no real example to point at: nothing on this machine is unpushed today,
+ * so this has never fired here. It is cheap, so it ships, but it is the part of this feature
+ * that should be watched rather than trusted.
  */
 function unpushedCommits(facts: RepoFacts): HealthSignal | null {
 	if (facts.unpushedCount === null || facts.unpushedCount <= 0) return null;
@@ -117,20 +108,18 @@ function unpushedCommits(facts: RepoFacts): HealthSignal | null {
 }
 
 /**
- * Every signal that fires for one repo.
- *
- * The plan's order: the two that need no extra git call come first, then the two
- * that cost one. Left as given rather than sorted by my own idea of urgency,
- * because a badge ordering is a preference and the plan already made it.
+ * Every signal that fires for one repo, in the plan's order: the two that need no extra git
+ * call first, then the two that cost one. Left as given rather than sorted by my own idea of
+ * urgency, because a badge ordering is a preference and the plan already made it.
  */
 export function healthSignals(
 	facts: RepoFacts,
 	previousDirtyCount: number | null,
 	now: number,
 ): HealthSignal[] {
-	// Nothing git reports about this repo can be believed, so there is nothing to
-	// warn about. A failed scan must not leave last scan's warnings on screen
-	// either: they were true of a repo nobody could read this time.
+	// Nothing git reports about this repo can be believed, so there is nothing to warn about. A
+	// failed scan must not leave last scan's warnings on screen either: they were true of a repo
+	// nobody could read this time.
 	if (!facts.gitReadable) return [];
 
 	const signals = [

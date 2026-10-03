@@ -58,14 +58,14 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	// rather than a default. The tooltip on the score needs no permission.
 	explainScores: false,
 	weights: { ...DEFAULT_WEIGHTS },
-	// null means "detect a working CLI", which is the point of auto-detection. A
-	// value here would be a choice the user never made, and honouring it would
-	// reinstate the exact bug detection exists to fix.
+	// null means "detect a working CLI", which is the point of auto-detection. A value
+	// here would be a choice the user never made, and honouring it would reinstate the
+	// exact bug detection exists to fix.
 	provider: null,
 	commitCount: COMMIT_COUNT_DEFAULT,
 	timeoutSeconds: 120,
 	// Empty means "reveal the folder in the file manager". Auto-detection is
-	// deliberately absent here: see the resolved decision in FEATURE-PLAN.md.
+	// deliberately absent here, for the reason spelled out at EDITOR_COMMAND_EXAMPLES.
 	editorCommand: "",
 	detection: { checkedAt: 0, probes: [], selected: null },
 };
@@ -73,20 +73,16 @@ const DEFAULT_SETTINGS: PluginSettings = {
 const RIBBON_TITLE = "Open Project Tracker";
 
 /**
- * Binaries found on the author's machine, listed as copyable examples.
- *
- * A literal list, not a probe and not a ranking. The plugin does not look for
- * editors at runtime and does not order them: which one you use is not something
- * a plugin can know, and offering a preference list would be it guessing.
+ * Binaries found on the author's machine, listed as copyable examples. A literal list, not
+ * a probe and not a ranking: which editor someone uses is not something a plugin can know,
+ * and offering a preference list would be it guessing.
  */
 const EDITOR_COMMAND_EXAMPLES = ["code", "cursor", "nvim", "vim"];
 
 /**
- * The working form for a terminal editor, which cannot use `nvim` directly.
- *
- * Obsidian has no terminal to hand one, so the terminal emulator goes in this
- * field and the editor becomes its argument. Spelled out here because it is the
- * one case where the obvious answer does not work.
+ * The working form for a terminal editor, which cannot use `nvim` directly. Obsidian has no
+ * terminal to hand one, so the terminal emulator goes in this field and the editor becomes
+ * its argument. Spelled out because it is the one case where the obvious answer fails.
  */
 const TERMINAL_EDITOR_EXAMPLE = "kitty --single-instance --directory";
 
@@ -101,21 +97,20 @@ export default class ProjectTrackerPlugin extends Plugin {
 	/**
 	 * Pin writes in flight, ordered per project, and the wait that drains them.
 	 *
-	 * Here rather than in the view because `refresh` below reads pins back out of the
-	 * notes, and there are two ways into `refresh`: the panel's Refresh button and the
-	 * command palette's "Rescan projects". A guard on one caller is not the invariant.
+	 * Here rather than in the view because `refresh` below reads pins back out of the notes
+	 * and has two doors into it: the panel's Refresh button and the command palette's
+	 * "Rescan projects". A guard on one caller is not the invariant.
 	 */
 	private readonly pinWrites = new PinQueue();
 
 	/**
 	 * Register everything the plugin adds to the workspace.
 	 *
-	 * Each step runs inside its own guard on purpose. A single throw used to
-	 * abort the rest of onload, which presented as a plugin with no ribbon icon,
-	 * no commands, and no settings tab and no error anywhere: Obsidian's own
-	 * report of a failed onload is a notice that flashes past plus a console
-	 * message behind the devtools window. Isolating the steps means the worst
-	 * case is one missing feature with a named, readable reason.
+	 * Each step runs inside its own guard on purpose. A single throw used to abort the rest
+	 * of onload, presenting as a plugin with no ribbon icon, no commands and no settings
+	 * tab and no error anywhere: Obsidian's own report of a failed onload is a notice that
+	 * flashes past plus a console message behind the devtools window. Isolating the steps
+	 * means the worst case is one missing feature with a named, readable reason.
 	 */
 	override async onload(): Promise<void> {
 		const log = new StartupLog(this);
@@ -177,10 +172,10 @@ export default class ProjectTrackerPlugin extends Plugin {
 			this.addSettingTab(new ProjectTrackerSettingTab(this.app, this));
 		});
 
-		// Probing spawns child processes, so it is not part of onload's critical path:
-		// a stale cache is repaired by the retest button, by the command above, or by
-		// a generation failure, none of which need onload to have finished. A cached
-		// pass is reused as-is; only a missing or old one is re-run.
+		// Probing spawns child processes, so it is not on onload's critical path: a stale cache
+		// is repaired by the retest button, by the command above, or by a generation failure,
+		// none of which need onload to have finished. A cached pass is reused as-is; only a
+		// missing or old one is re-run.
 		this.guard(log, "ensureDetection", () => {
 			if (this.detectionIsStale()) void this.retestProviders(false);
 		});
@@ -199,9 +194,9 @@ export default class ProjectTrackerPlugin extends Plugin {
 	}
 
 	override onunload(): void {
-		// No long-lived child processes: a probe is killed at PROBE_TIMEOUT_MS and
-		// nothing else outlives the call that started it. Scans are still spawnSync,
-		// and they finish before unload returns.
+		// No long-lived child processes: a probe is killed at PROBE_TIMEOUT_MS and nothing
+		// else outlives the call that started it. Scans are still spawnSync, and finish
+		// before unload returns.
 	}
 
 /** Where a failure was recorded, for a notice to name. */
@@ -210,11 +205,9 @@ export default class ProjectTrackerPlugin extends Plugin {
 	}
 
 	/**
-	 * The durable failure log, built on first use.
-	 *
-	 * Lazy rather than built in onload because resolving the plugin folder needs
-	 * a loaded `Plugin`, and nothing that touches the log has to happen before
-	 * the rest of the plugin is registered.
+	 * The durable failure log, built on first use. Lazy because resolving the plugin folder
+	 * needs a loaded `Plugin`, and nothing that touches the log has to happen before the
+	 * rest of the plugin is registered.
 	 */
 	private errors(): ErrorLog {
 		if (!this.errorLog) this.errorLog = new ErrorLog(this);
@@ -224,11 +217,10 @@ export default class ProjectTrackerPlugin extends Plugin {
 	/**
 	 * Record one failure to `errors.log` and tell the user where it went.
 	 *
-	 * Every generation failure goes through here, not just the ones that happened
-	 * to reach the view. A failure with only a transient Notice behind it is a
-	 * failure nobody can act on later, and the auth error that motivated this was
-	 * invisible for exactly that reason. Duration 0 stays: the notice should
-	 * still be there when the user looks.
+	 * Every generation failure goes through here, not just the ones that happened to reach
+	 * the view. A failure with only a transient Notice behind it is a failure nobody can act
+	 * on later, and the auth error that motivated this was invisible for exactly that
+	 * reason. Duration 0 stays: the notice should still be there when the user looks.
 	 */
 	private fail(project: string, provider: string, message: string): null {
 		this.errors().record({ provider, project, message });
@@ -250,14 +242,10 @@ export default class ProjectTrackerPlugin extends Plugin {
 	}
 
 	/**
-	 * Probe all three CLIs and cache the result.
-	 *
-	 * Concurrent and non-blocking. Sequential blocking probes froze the main thread
-	 * for 37-43s measured; concurrently the total is the slowest single probe.
-	 *
-	 * `announce` distinguishes the two callers: the settings button tells the user
-	 * what it found, load-time repair stays quiet because a notice nobody asked for
-	 * is noise.
+	 * Probe all three CLIs and cache the result. Concurrent and non-blocking: sequential
+	 * blocking probes froze the main thread for 37-43s measured, while concurrently the
+	 * total is the slowest single probe. `announce` distinguishes the two callers, because
+	 * load-time repair stays quiet where a notice nobody asked for is noise.
 	 */
 	async retestProviders(announce = true): Promise<void> {
 		const probes = await detectProvidersAsync();
@@ -290,13 +278,11 @@ export default class ProjectTrackerPlugin extends Plugin {
 	/**
 	 * Re-probe one provider after it failed, then recompute the choice.
 	 *
-	 * Only the provider that failed is re-probed, not all three. Authentication
-	 * gets fixed outside Obsidian, in a terminal, and the user should not have to
-	 * restart the app for the plugin to notice; re-probing all three would cost
-	 * three probes to react to one CLI's worth of news.
-	 *
-	 * Fire-and-forget: the failure has already been reported and logged, so nothing
-	 * on screen is waiting on this.
+	 * Only the provider that failed, not all three. Authentication gets fixed outside
+	 * Obsidian, in a terminal, and the user should not have to restart the app for the
+	 * plugin to notice; re-probing all three would cost three probes to react to one
+	 * CLI's worth of news. Fire-and-forget: the failure has already been reported and
+	 * logged, so nothing on screen is waiting on this.
 	 */
 	private async recheckProvider(provider: ProviderId): Promise<void> {
 		const fresh = await probeCapabilityAsync(provider);
@@ -324,20 +310,20 @@ export default class ProjectTrackerPlugin extends Plugin {
 	/**
 	 * Write one project's pin to its note, without rescanning anything.
 	 *
-	 * Pinning used to call `refresh`, which forked a `git` process for every
-	 * repository under the scan root and rewrote every note to store one integer, on
-	 * a panel the user had just asked to make easier to use. The pin is one field of
-	 * one note, so it is written on its own and the panel re-ranks in memory.
+	 * Pinning used to call `refresh`, which forked a `git` process for every repository
+	 * under the scan root and rewrote every note to store one integer, on a panel the user
+	 * had just asked to make easier to use. The pin is one field of one note, so it is
+	 * written on its own and the panel re-ranks in memory.
 	 *
 	 * `writePin` patches `pinned` and nothing else. An earlier version went through
 	 * `syncProjectNote`, which recomputes every managed key, and that quietly rewrote
-	 * `last_commit_rel` too: it is an age measured against `Date.now()`, so the pin
-	 * write computed it against a later clock than the scan had and restated it. The
-	 * scan owns that key.
+	 * `last_commit_rel` too: it is an age measured against `Date.now()`, so the pin write
+	 * computed it against a later clock than the scan had and restated it. The scan owns
+	 * that key.
 	 *
-	 * Returns whether the write landed. The view draws the new pin before calling
-	 * this and puts it back if it comes back false, so a pin that silently did not
-	 * save cannot be left on screen.
+	 * Returns whether the write landed. The view draws the new pin before calling this and
+	 * puts it back if it comes back false, so a pin that silently did not save cannot be
+	 * left on screen.
 	 */
 	async savePin(project: Project): Promise<boolean> {
 		const path = await writePin(this.app, this.settings, project);
@@ -353,13 +339,13 @@ export default class ProjectTrackerPlugin extends Plugin {
 	/**
 	 * Queue one pin write for one project, behind whatever is already writing it.
 	 *
-	 * `target` is a function rather than a rank because the write is queued: a `p`
-	 * pressed twice has to read the rank the first press left, not the one that was on
-	 * screen when the second key went down.
+	 * `target` is a function rather than a rank because the write is queued: a `p` pressed
+	 * twice has to read the rank the first press left, not the one on screen when the
+	 * second key went down.
 	 *
-	 * The write itself belongs to the caller, because drawing the row before the write
-	 * and putting it back after a failure is the view's business. This owns only the
-	 * ordering, which is what `refresh` has to wait on.
+	 * The write itself belongs to the caller, because drawing the row before the write and
+	 * putting it back after a failure is the view's business. This owns only the ordering,
+	 * which is what `refresh` has to wait on.
 	 */
 	queuePinWrite(project: Project, target: () => number, write: (pin: number) => Promise<void>): Promise<void> {
 		return this.pinWrites.queue(project.facts.name, () => write(target()));
@@ -369,16 +355,16 @@ export default class ProjectTrackerPlugin extends Plugin {
 	 * Rescan, score, then write the per-project notes.
 	 *
 	 * Settles the pin queue first, because this is where pins are read back out of the
-	 * notes. A pin write that has not landed yet reads as absent, and this method
-	 * replaces `this.projects` with new objects, so an in-flight write would leave the
-	 * panel showing one rank and the note holding another. Both entry points reach
-	 * this line, so both are covered.
+	 * notes. A pin write that has not landed yet reads as absent, and this method replaces
+	 * `this.projects` with new objects, so an in-flight write would leave the panel showing
+	 * one rank and the note holding another. Both entry points reach this line, so both are
+	 * covered.
 	 *
-	 * Pins and the previous dirty count are then read before scoring so a manual rank
-	 * survives a rescan and a sustained-dirty warning knows what the last scan saw.
-	 * Both must happen before the notes are written: the dirty count is written by
-	 * this very scan, so reading it afterwards would compare the repo against itself
-	 * and warn on every repo that has ever been dirty.
+	 * Pins and the previous dirty count are then read before scoring, so a manual rank
+	 * survives a rescan and a sustained-dirty warning knows what the last scan saw. Both
+	 * must happen before the notes are written: the dirty count is written by this very
+	 * scan, so reading it afterwards would compare the repo against itself and warn on
+	 * every repo that has ever been dirty.
 	 */
 	async refresh(): Promise<Project[]> {
 		await this.pinWrites.settle();
@@ -415,13 +401,11 @@ export default class ProjectTrackerPlugin extends Plugin {
 	/**
 	 * Open one project's folder in the user's editor, or reveal it.
 	 *
-	 * Two outcomes and neither is an error worth hiding: an empty
-	 * `editorCommand` reveals the folder in the file manager, which is what a
-	 * fresh install does. Refusals name their reason, because a button that
-	 * silently does nothing is the failure users cannot act on.
-	 *
-	 * Nothing here waits on the editor. See `src/editor.ts` for why that is not a
-	 * per-binary decision.
+	 * Two outcomes and neither is an error worth hiding: an empty `editorCommand` reveals
+	 * the folder in the file manager, which is what a fresh install does. Refusals name
+	 * their reason, because a button that silently does nothing is the failure users
+	 * cannot act on. Nothing here waits on the editor; see `src/editor.ts` for why that is
+	 * not a per-binary decision.
 	 */
 	async openRepoFolder(project: Project): Promise<void> {
 		const name = project.facts.name;
@@ -445,14 +429,14 @@ export default class ProjectTrackerPlugin extends Plugin {
 	/**
 	 * Generate or regenerate one project's AI summary.
 	 *
-	 * Manual trigger only, and one project at a time. Nothing here runs on a
-	 * timer, on scan, or on view open, because a summary is a snapshot of a model
-	 * call and those are expensive and easy to make stale by accident.
+	 * Manual trigger only, and one project at a time. Nothing here runs on a timer, on
+	 * scan, or on view open, because a summary is a snapshot of a model call and those are
+	 * expensive and easy to make stale by accident.
 	 *
-	 * Writes exactly one file, the `<name>-ai.md` sibling, and only after the
-	 * model's reply has parsed into the expected shape. Every failure path, from
-	 * no working CLI to a missing binary to a hung CLI to a reply in the wrong
-	 * shape, reports through a Notice, records to `errors.log`, and writes nothing.
+	 * Writes exactly one file, the `<name>-ai.md` sibling, and only after the model's reply
+	 * has parsed into the expected shape. Every failure path, from no working CLI to a
+	 * missing binary to a hung CLI to a reply in the wrong shape, reports through a
+	 * Notice, records to `errors.log`, and writes nothing.
 	 */
 	async generateSummary(project: Project): Promise<SummaryState | null> {
 		const name = project.facts.name;
@@ -479,8 +463,8 @@ export default class ProjectTrackerPlugin extends Plugin {
 
 		if (!result.ok) {
 			// The failure may be a stale probe, since auth gets fixed in a terminal
-			// rather than in Obsidian. Re-probe this one CLI so the next attempt
-			// picks up the fix without an app restart.
+			// rather than in Obsidian. Re-probe this one CLI so the next attempt picks
+			// up the fix without an app restart.
 			if (this.settings.provider === null) void this.recheckProvider(provider);
 			return this.fail(name, provider, result.error);
 		}
@@ -524,9 +508,9 @@ export default class ProjectTrackerPlugin extends Plugin {
 			`Project Tracker: ${existed ? "regenerated" : "wrote"} ${name} summary from ${stamp.commit ?? "no commit"}${dirtyNote}.`,
 		);
 
-		// The repo may have moved while the CLI ran, so recompute rather than
-		// reporting fresh. `nextHead` differing from the stamp is the same check
-		// the panel makes on the next scan.
+		// The repo may have moved while the CLI ran, so recompute rather than reporting
+		// fresh. `nextHead` differing from the stamp is the same check the panel makes
+		// on the next scan.
 		if (nextHead !== null && nextHead !== stamp.commit) {
 			state.stale = true;
 			state.staleReason = `repo moved during generation (${stamp.commit} to ${nextHead})`;
@@ -536,9 +520,9 @@ export default class ProjectTrackerPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		// Clamped after the merge, not before: an existing data.json can hold a
-		// provider id or a commit count this build no longer accepts, and settings
-		// that are wrong on load are what produced a silently broken panel before.
+		// Clamped after the merge, not before: an existing data.json can hold a provider id
+		// or a commit count this build no longer accepts, and settings that are wrong on
+		// load are what produced a silently broken panel before.
 		const loaded = (await this.loadData()) as Partial<PluginSettings> | null;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded ?? {});
 
@@ -548,10 +532,9 @@ export default class ProjectTrackerPlugin extends Plugin {
 			this.settings.provider = null;
 		}
 
-		// Replaced rather than merged, so a hand-edited or older data.json cannot
-		// smuggle an unvalidated state into the settings tab. `sanitizeProbes`
-		// discards anything it does not recognise, and a cache that survives as
-		// empty simply reads as never probed.
+		// Replaced rather than merged, so a hand-edited or older data.json cannot smuggle an
+		// unvalidated state into the settings tab. `sanitizeProbes` discards anything it
+		// does not recognise, and a cache that survives as empty reads as never probed.
 		const detection = loaded?.detection;
 		this.settings.detection = {
 			checkedAt: typeof detection?.checkedAt === "number" && Number.isFinite(detection.checkedAt) ? detection.checkedAt : 0,
@@ -562,10 +545,10 @@ export default class ProjectTrackerPlugin extends Plugin {
 		this.settings.commitCount = clampCommitCount(Number(this.settings.commitCount));
 		this.settings.timeoutSeconds = clampTimeoutSeconds(Number(this.settings.timeoutSeconds));
 
-		// Replaced rather than merged, and validated field by field: data.json is a
-		// file a person can edit, and half a scoring model reading NaN is worse
-		// than ignoring the edit. Always a fresh object, so nothing the settings tab
-		// writes can reach back and change the defaults.
+		// Replaced rather than merged, and validated field by field: data.json is a file a
+		// person can edit, and half a scoring model reading NaN is worse than ignoring the
+		// edit. Always a fresh object, so nothing the settings tab writes can reach back
+		// and change the defaults.
 		this.settings.weights = sanitizeWeights(loaded?.weights);
 
 		// The editor command is a string with no valid values to reject, so it only
@@ -584,12 +567,10 @@ function summarize(probes: readonly ProviderProbe[]): string {
 }
 
 /**
- * The sentence describing one provider's detected state.
- *
- * The three states are worded as three different situations rather than a yes/no,
- * because "installed" and "works" are separate facts: gemini on this machine is
- * installed, runs, and cannot authenticate, and a tab that said only "available"
- * would read as fine.
+ * The sentence describing one provider's detected state. The three states are worded as
+ * three different situations rather than a yes/no, because "installed" and "works" are
+ * separate facts: gemini on this machine is installed, runs, and cannot authenticate, and
+ * a tab that said only "available" would read as fine.
  */
 function detailFor(id: ProviderId, probe: ProviderProbe | undefined): string {
 	switch (probe?.state) {
@@ -711,11 +692,10 @@ class ProjectTrackerSettingTab extends PluginSettingTab {
 					}),
 			);
 
-		// The installed version and the detected capability are shown as separate
-		// facts on purpose. Version alone is what produced the trap: gemini passes
-		// `--version` with exit 0 on a machine where it cannot authenticate, so a
-		// settings tab reporting only the version reads as fine right up until a
-		// summary fails.
+		// The installed version and the detected capability are shown as separate facts on
+		// purpose. Version alone is what produced the trap: gemini passes `--version` with
+		// exit 0 on a machine where it cannot authenticate, so a settings tab reporting
+		// only the version reads as fine right up until a summary fails.
 		const detectionNote = containerEl.createDiv({ cls: "pt-probe" });
 		const probedAt = checkedAt === 0 ? "never" : new Date(checkedAt).toLocaleString();
 		detectionNote.setText(

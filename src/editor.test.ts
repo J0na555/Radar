@@ -41,11 +41,9 @@ function gitRepo(prefix: string): string {
 }
 
 /**
- * A real executable that records what it was called with.
- *
- * A real process rather than a stub, because the thing under test is the spawn
- * itself: an argv array with no shell between us and the editor, one argument
- * for the folder even when the folder's name has a space in it.
+ * A real executable that records what it was called with. A real process rather than a stub,
+ * because the thing under test is the spawn itself: an argv array with no shell between us
+ * and the editor, one argument for the folder even when the folder's name has a space.
  */
 function recordingEditor(dir: string, sleepSeconds: number): { script: string; calls: () => string[] } {
 	const script = path.join(dir, "fake-editor.sh");
@@ -95,8 +93,7 @@ describe("parseEditorCommand", () => {
 		assert.deepEqual(parseEditorCommand("  code \t -n  "), { command: "code", args: ["-n"] });
 	});
 
-	// No shell runs, so nothing in the value can become a second command. The
-	// tokens are passed through as-is and `code` is what gets executed.
+	// No shell runs, so nothing in the value can become a second command.
 	it("treats shell syntax as literal argv tokens", () => {
 		assert.deepEqual(parseEditorCommand("code; rm -rf ~"), {
 			command: "code;",
@@ -152,9 +149,9 @@ describe("openRepoFolder refusals", () => {
 });
 
 describe("openRepoFolder launching", () => {
-	// The real question this feature has to get right: does clicking the row
-	// return, or does Obsidian wait for the editor to close? Everything below runs
-	// a real process and measures the call.
+	// The real question this feature has to get right: does clicking the row return, or does
+	// Obsidian wait for the editor to close? Everything below runs a real process and
+	// measures the call.
 	const skip = process.platform === "win32" ? "needs a POSIX shell to fake an editor" : false;
 
 	it("passes the repo folder as one argument, with no shell in between", { skip }, async () => {
@@ -168,8 +165,8 @@ describe("openRepoFolder launching", () => {
 		assert.equal(result.ok && result.mode, "editor");
 
 		assert.ok(await waitFor(() => editor.calls().includes("started")));
-		// One argument, the folder, verbatim. A shell string would have split this
-		// into two and the editor would have received a path that does not exist.
+		// One argument, the folder, verbatim. A shell string would have split this in two and
+		// the editor would have received a path that does not exist.
 		const call = editor.calls();
 		assert.equal(call[0], repo);
 		// Waited for, not asserted straight away. The script writes "started" and
@@ -193,13 +190,12 @@ describe("openRepoFolder launching", () => {
 		const elapsed = Date.now() - started;
 
 		assert.equal(result.ok, true);
-		// The machine-independent claim: the call came back before the child's own
-		// minimum lifetime of 4000ms, so it did not wait for the editor to close.
-		// Give real headroom because this suite runs in parallel and scheduling can jitter.
+		// The machine-independent claim: the call came back before the child's own 4000ms minimum
+		// lifetime, so it did not wait for the editor to close. Headroom is real because this
+		// suite runs in parallel and scheduling can jitter.
 		assert.ok(elapsed < 2000, `launch blocked for ${elapsed}ms, past 2000ms headroom`);
 
-		// The point of the measurement: the editor is provably mid-session, so the
-		// call really did not wait for it.
+		// The point of the measurement: the editor is provably mid-session.
 		assert.ok(await waitFor(() => editor.calls().includes("started")));
 		assert.ok(!editor.calls().includes("finished"), "the editor had already exited, so nothing was proven");
 
@@ -235,8 +231,8 @@ describe("editorActionLabel", () => {
 	});
 
 	it("drops the arguments, which are not part of the binary's name", () => {
-		// `kitty --single-instance --directory` reads as "in kitty", and naming the
-		// whole string on a button nobody is going to type is noise.
+		// `kitty --single-instance --directory` reads as "in kitty", and naming the whole string
+		// on a button nobody is going to type is noise.
 		assert.equal(editorActionLabel("x", "kitty --single-instance --directory"), "Open x in kitty");
 		assert.equal(editorActionLabel("x", "nvim   -p  "), "Open x in nvim");
 	});

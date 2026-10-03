@@ -5,9 +5,8 @@ import { isInsideScrollBox } from "./scroll.ts";
 /**
  * A row, and the box it is being scrolled inside.
  *
- * The numbers are the panel's own: a 400px-tall `.pt-body` below a 120px header, so
- * the ancestor box starts 120px above the list. Everything here is about which box
- * the comparison is handed.
+ * The panel's own numbers: a 400px-tall `.pt-body` below a 120px header, so the ancestor box
+ * starts 120px above the list. Everything here is about which box the comparison is handed.
  */
 const HEADER_PX = 120;
 const BODY_PX = 400;
@@ -20,8 +19,8 @@ function scrollBox(): { top: number; bottom: number; left: number; right: number
 }
 
 /**
- * The box `offsetParent` used to hand over instead: a positioned ancestor that starts
- * above the list, with the header's height between its top edge and the first row.
+ * The box `offsetParent` used to hand over instead: a positioned ancestor starting above the
+ * list, with the header's height between its top edge and the first row.
  */
 function offsetParentBox(): { top: number; bottom: number; left: number; right: number } {
 	return { top: 0, bottom: HEADER_PX + BODY_PX, left: 0, right: WIDTH };
@@ -52,10 +51,9 @@ describe("isInsideScrollBox", () => {
 	});
 
 	it("calls the same row visible against the ancestor box", () => {
-		// Why the offset was wrong: `.pt-body` declares no `position`, so `offsetParent`
-		// skipped it and returned a box 120px taller at the top. Every row in that
-		// header band is inside it, so the panel decided the row was already on screen
-		// and left the scroll alone.
+		// `.pt-body` declares no `position`, so `offsetParent` skipped it and returned a box
+		// 120px taller at the top. Every row in that header band is inside it, so the panel
+		// decided the row was already on screen and left the scroll alone.
 		assert.equal(isInsideScrollBox(offsetParentBox(), row(-40)), true);
 		assert.equal(isInsideScrollBox(offsetParentBox(), row(-1)), true);
 		// The same row, both ways round, so the two boxes cannot be swapped by accident.
@@ -75,10 +73,9 @@ describe("isInsideScrollBox", () => {
 	});
 
 	it("counts a row within a pixel of the edge as visible", () => {
-		// Rows land on fractions of a pixel, and a row just over the edge is not off
-		// screen. Scrolling there would move the viewport on renders where nothing
-		// moved, which is the fight with the user that not scrolling an already-visible
-		// row exists to avoid. One pixel is the whole slack, so the boundary is at -1.
+		// Rows land on fractions of a pixel, and a row just over the edge is not off screen.
+		// Scrolling there would move the viewport on renders where nothing moved. One pixel
+		// is the whole slack, so the boundary is at -1.
 		assert.equal(isInsideScrollBox(scrollBox(), row(0)), true);
 		assert.equal(isInsideScrollBox(scrollBox(), row(BODY_PX - ROW_PX)), true);
 		assert.equal(isInsideScrollBox(scrollBox(), row(-1)), true, "a row 1px over the edge");
@@ -86,9 +83,9 @@ describe("isInsideScrollBox", () => {
 	});
 
 	it("never calls a row taller than the scroller visible", () => {
-		// Which is right, because there is no scroll position that shows all of it, and
-		// `block: "nearest"` against a box that already fills the scroller moves nothing.
-		// A tall row is what the "Why" toggle makes of a project with a long breakdown.
+		// There is no scroll position that shows all of it, and `block: "nearest"` against
+		// a box that already fills the scroller moves nothing. A tall row is what the "Why"
+		// toggle makes of a project with a long breakdown.
 		const tall = {
 			top: HEADER_PX + 10,
 			bottom: HEADER_PX + 10 + BODY_PX + 40,

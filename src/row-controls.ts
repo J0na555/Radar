@@ -1,20 +1,17 @@
 /**
  * One project row, and the widgets it is made of.
  *
- * Out of `view.ts` because the row grew past the point where the state and the
- * markup were in the same function: the view decides what happens, this builds the
- * elements and hands back the click handlers as callbacks. `createProjectRow` at
- * the top is the whole row, so the view no longer knows what a row is made of, only
- * which project it is for and whether it is pinned, selected, or a loose match.
+ * Out of `view.ts` because the row grew past the point where the state and the markup were
+ * in the same function. The view decides what happens, this builds the elements and hands
+ * back the click handlers.
  *
- * The labelling contract is the same everywhere in here: a control that acts gets
- * its full wording on both `aria-label` and `title`, so the explanation is
- * reachable by keyboard and readable on hover.
+ * The labelling contract is the same everywhere in here: a control that acts gets its full
+ * wording on both `aria-label` and `title`, so the explanation is reachable by keyboard and
+ * readable on hover.
  *
- * Plain `createElement` and `textContent` throughout rather than Obsidian's
- * `createSpan`/`setText` prototype helpers. The helpers are nicer, but they only
- * exist once Obsidian has patched the DOM, and a row that throws while drawing
- * leaves an empty panel with a stack trace nobody sees.
+ * Plain `createElement` and `textContent` throughout rather than Obsidian's prototype
+ * helpers, which only exist once Obsidian has patched the DOM: a row that throws while
+ * drawing leaves an empty panel with a stack trace nobody sees.
  */
 import { setIcon } from "obsidian";
 import { relativeAge } from "./format";
@@ -39,11 +36,10 @@ export interface ProjectRowOptions {
 	/** A summary is running for this project, so its control is disabled. */
 	summarizing: boolean;
 	/**
-	 * Put the keyboard selection on this row.
-	 *
-	 * Separate from the row's own actions because selecting is not acting: clicking a
-	 * name selects the row and opens its note, and the highlight has to move either
-	 * way, or the panel ends up with two different notions of "the row I am on".
+	 * Put the keyboard selection on this row. Separate from the row's own actions because
+	 * selecting is not acting: clicking a name selects the row and opens its note, and the
+	 * highlight has to move either way, or the panel ends up with two different notions of
+	 * "the row I am on".
 	 */
 	onSelect: () => void;
 	onOpenNote: (project: Project) => void;
@@ -56,14 +52,9 @@ export interface ProjectRowOptions {
 /**
  * One project row, whole.
  *
- * The row used to be assembled inside the view's render method, which meant the
- * view owned the markup, the facts it chose to show, and the state it decided
- * them from. All three live here now, with the controls below it. The view passes
- * what it knows and gets an element back.
- *
- * Element order on the right is fixed for every row: pin slot, editor, summary,
- * score. The pin slot is drawn even when the project is unpinned, so the score
- * never moves sideways when something gets pinned.
+ * Element order on the right is fixed for every row: pin slot, editor, summary, score. The
+ * pin slot is drawn even when the project is unpinned, so the score never moves sideways
+ * when something gets pinned.
  */
 export function createProjectRow(doc: Document, options: ProjectRowOptions): HTMLElement {
 	const { project, pinned, selected, weak, explainScores, now, summarizing } = options;
@@ -84,11 +75,10 @@ export function createProjectRow(doc: Document, options: ProjectRowOptions): HTM
 	const name = doc.createElement("div");
 	name.className = "pt-name";
 	name.textContent = project.facts.name;
-	// The mouse equivalent of moving the cursor here and pressing Enter, and it has to
-	// select as well as open. Otherwise the panel carries two ideas of the current row:
-	// the highlighted one, which `j`, `Enter`, `s` and `p` all act on, and the one the
-	// user last clicked. They drift apart the moment somebody clicks a row and then
-	// presses `s`.
+	// The mouse equivalent of moving the cursor here and pressing Enter, and it has to select
+	// as well as open. Otherwise the panel carries two ideas of the current row: the
+	// highlighted one, which `j`, `Enter`, `s` and `p` all act on, and the one the user last
+	// clicked. They drift apart the moment somebody clicks a row and then presses `s`.
 	name.addEventListener("click", () => {
 		options.onSelect();
 		options.onOpenNote(project);
@@ -115,12 +105,12 @@ export function createProjectRow(doc: Document, options: ProjectRowOptions): HTM
 	age.textContent = relativeAge(project.facts.lastCommit, now);
 	meta.appendChild(age);
 
-	// After the facts, so the eye reads what the repo is before what is wrong with
-	// it. Empty for a healthy repo, which is every row most of the time.
+// After the facts, so the eye reads what the repo is before what is wrong with it.
+		// Empty for a healthy repo, which is every row most of the time.
 	appendHealthBadges(meta, project.health);
 
-	// Off unless asked for, and once per row rather than per score: the tooltip is
-	// always there, this is for reading without hovering anything.
+	// Off unless asked for, and once per row rather than per score: the tooltip is always
+		// there, this is for reading without hovering anything.
 	if (explainScores) main.appendChild(createWhyLine(doc, project.score));
 
 	const right = doc.createElement("div");
@@ -142,11 +132,10 @@ export function createProjectRow(doc: Document, options: ProjectRowOptions): HTM
 /**
  * The AI summary control for one row.
  *
- * Three states, and the difference between them is the point of the whole
- * feature: nothing generated, something generated and current, and something
- * generated that the repo has since moved past. A stale summary is the one that
- * reads as authoritative while being wrong, so it gets its own wording and a
- * warning colour rather than sharing a button with the current case.
+ * Three states, and the difference between them is the point of the whole feature: nothing
+ * generated, something generated and current, and something generated that the repo has
+ * since moved past. A stale summary reads as authoritative while being wrong, so it gets its
+ * own wording and a warning colour rather than sharing a button with the current case.
  */
 export function createSummaryControl(
 	doc: Document,
@@ -182,10 +171,8 @@ export function createSummaryControl(
 }
 
 /**
- * The button that hands the repo folder to the editor.
- *
- * An icon rather than text, because every row carries one and the panel is a
- * list, not a form.
+ * The button that hands the repo folder to the editor. An icon rather than text, because
+ * every row carries one and the panel is a list, not a form.
  */
 export function createOpenControl(doc: Document, label: string, onOpen: () => void): HTMLElement {
 	const button = doc.createElement("button");
@@ -202,12 +189,10 @@ export function createOpenControl(doc: Document, label: string, onOpen: () => vo
 }
 
 /**
- * The score, in its own slot, saying what it is.
- *
- * The word `score` is on the row rather than only in the tooltip because two of
- * these projects were reported as having "it" and nobody could tell what. The
- * breakdown comes from `parts`, so the tooltip cannot describe a different score
- * than the number beside it.
+ * The score, in its own slot, saying what it is. The word `score` is on the row rather than
+ * only in the tooltip because two of these projects were reported as having "it" and nobody
+ * could tell what. The breakdown comes from `parts`, so the tooltip cannot describe a
+ * different score than the number beside it.
  */
 export function createScoreSlot(doc: Document, score: ScoreResult): HTMLElement {
 	const slot = doc.createElement("span");
@@ -230,11 +215,9 @@ export function createScoreSlot(doc: Document, score: ScoreResult): HTMLElement 
 }
 
 /**
- * The user's pin rank, in a slot of its own.
- *
- * Rendered whether or not the project is pinned, so the score does not slide
- * sideways when a project is pinned. That was the collision: pin rank and score
- * shared one position, with nothing on the row to say which was which.
+ * The user's pin rank, in a slot of its own. Rendered whether or not the project is pinned,
+ * so the score does not slide sideways when a project is pinned. That was the collision: pin
+ * rank and score shared one position, with nothing on the row to say which was which.
  */
 export function createPinSlot(doc: Document, pin: number | null): HTMLElement {
 	const slot = doc.createElement("span");
@@ -256,10 +239,9 @@ export function createPinSlot(doc: Document, pin: number | null): HTMLElement {
 }
 
 /**
- * One compact word per firing health signal, with the explanation on hover.
- *
- * Appended to the row's fact line rather than given a line of its own, and never
- * given a number: see the note in `src/health.ts`.
+ * One compact word per firing health signal, with the explanation on hover. Appended to the
+ * row's fact line rather than given a line of its own, and never given a number: see the
+ * note in `src/health.ts`.
  */
 export function appendHealthBadges(host: HTMLElement, signals: HealthSignal[]): void {
 	const doc = host.ownerDocument;
@@ -274,10 +256,8 @@ export function appendHealthBadges(host: HTMLElement, signals: HealthSignal[]): 
 }
 
 /**
- * The "why this score" line.
- *
- * Same sentence as the tooltip, on purpose: a second wording for the same score
- * is how two explanations of a number start disagreeing.
+ * The "why this score" line. Same sentence as the tooltip, on purpose: a second wording for
+ * the same score is how two explanations of a number start disagreeing.
  */
 export function createWhyLine(doc: Document, score: ScoreResult): HTMLElement {
 	const line = doc.createElement("div");

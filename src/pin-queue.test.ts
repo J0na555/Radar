@@ -13,10 +13,9 @@ interface Write {
 }
 
 /**
- * Queue a write for one project and hand back the levers.
- *
- * The gate is created before the write is queued, so `finish` is callable on the
- * handle straight away rather than having to wait for the write to start.
+ * Queue a write for one project and hand back the levers. The gate is created before the
+ * write is queued, so `finish` is callable on the handle straight away rather than having to
+ * wait for the write to start.
  */
 function deferred(queue: PinQueue, name: string): Write {
 	let release: (succeeds: boolean) => void = () => {};
@@ -47,9 +46,9 @@ function tick(): Promise<void> {
 /**
  * Let microtasks run without ever awaiting the queue.
  *
- * The livelock is a promise that never resolves, and awaiting it is what turns a
- * regression into a hung test runner. This counts turns instead of waiting on it, so
- * a queue that forgets to clear its entries fails in milliseconds instead.
+ * The livelock is a promise that never resolves, and awaiting it is what turns a regression
+ * into a hung test runner. This counts turns instead of waiting on it, so a queue that
+ * forgets to clear its entries fails in milliseconds instead.
  */
 async function pump(turns = 50): Promise<void> {
 	for (let i = 0; i < turns; i++) await Promise.resolve();
@@ -57,10 +56,10 @@ async function pump(turns = 50): Promise<void> {
 
 describe("settle", () => {
 	it("clears a project's entry when its own write settles", async () => {
-		// The root cause of the livelock, checked without awaiting the queue so a
-		// regression fails here first instead of hanging the runner. `settle`'s exit
-		// condition is this count reaching zero, so an entry that outlives its write is
-		// the bug, and a settle that cannot exit is only its symptom.
+		// The root cause of the livelock, checked without awaiting the queue so a regression
+		// fails here first instead of hanging the runner. `settle`'s exit condition is this
+		// count reaching zero, so an entry that outlives its write is the bug and a settle
+		// that cannot exit is only its symptom.
 		const queue = new PinQueue();
 		await queue.queue("api-ai", async () => {});
 		await pump();
@@ -93,10 +92,9 @@ describe("settle", () => {
 	});
 
 	it("lets timers fire while it waits, instead of starving the event loop", { timeout: 5000 }, async () => {
-		// The symptom, not the cause. Awaiting settled promises resolves in the
-		// microtask queue, so a settle that cannot exit never yields to the task queue.
-		// In Obsidian, a single-threaded renderer, that is the whole application
-		// frozen: no timers, no click handling, no input.
+		// The symptom, not the cause. Awaiting settled promises resolves in the microtask
+		// queue, so a settle that cannot exit never yields to the task queue: in Obsidian's
+		// single-threaded renderer that is the whole application frozen.
 		const queue = new PinQueue();
 		deferred(queue, "api-ai").finish(true);
 		let fired = false;
@@ -159,11 +157,11 @@ describe("settle", () => {
 
 describe("ordering", () => {
 	it("runs a second write after the first and still tracks it in the queue", { timeout: 5000 }, async () => {
-		// The identity check in `queue`. When the first write's tail settles it removes
-		// itself from the map, and by then the second write owns the entry. Removing it
-		// unconditionally would drop the second write out of the queue: the third pin
-		// would not wait for it and `settle` would not wait for it either, which is the
-		// original race back again through the bookkeeping.
+		// The identity check in `queue`. When the first write's tail settles it removes itself
+		// from the map, and by then the second write owns the entry. An unconditional delete
+		// would drop the second write out of the queue: the third pin would not wait for it
+		// and `settle` would not either, which is the original race back again through the
+		// bookkeeping.
 		const queue = new PinQueue();
 		const first = deferred(queue, "api-ai");
 		const second = deferred(queue, "api-ai");
@@ -228,11 +226,11 @@ describe("ordering", () => {
 
 describe("two writes for one project", () => {
 	/**
-	 * Drive two writes at one project through the real queue and the real write, then
-	 * report whether the panel and the note ended up saying the same thing.
+	 * Drive two writes at one project through the real queue and the real write, then report
+	 * whether the panel and the note ended up saying the same thing.
 	 *
-	 * `succeeds` is what each write's save resolves to, in order. The panel's rank is
-	 * the project object; the note's rank is what the fake vault stored.
+	 * `succeeds` is what each write's save resolves to, in order. The panel's rank is the
+	 * project object; the note's rank is what the fake vault stored.
 	 */
 	async function outcome(succeeds: [boolean, boolean]): Promise<{ panel: number; note: number }> {
 		const queue = new PinQueue();
@@ -279,17 +277,14 @@ describe("two writes for one project", () => {
 	});
 
 	it("agrees when both writes fail", async () => {
-		// Two rollbacks, ending where the project started.
 		assert.deepEqual(await outcome([false, false]), { panel: 0, note: 0 });
 	});
 
 	it("reads the target rank when the write runs, not when it was queued", async () => {
-		// `p` pressed twice on an unpinned project, which is what the queue is for. The
-		// target is a function because the second press has to read the rank the first
-		// press left: unpinned -> top of the pinned group, pinned -> 0. Read at queue
-		// time instead, the second press would compute its target from a project that
-		// had not been pinned yet and would pin the row at the top again, so the second
-		// press did nothing at all.
+		// `p` pressed twice on an unpinned project, which is what the queue is for. The target is
+		// a function because the second press has to read the rank the first press left.
+		// Read at queue time instead, the second press would compute its target from a
+		// project not yet pinned and pin the row at the top again, so the press did nothing.
 		const queue = new PinQueue();
 		const project = { pin: 0 };
 		const note = { rank: 0 };

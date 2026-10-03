@@ -22,13 +22,12 @@ export function relativeAge(iso: string | null, now: number): string {
  * The date part of an ISO timestamp: `2026-08-30T18:51:55+03:00` becomes
  * `2026-08-30`.
  *
- * Used for the `last_commit` frontmatter key. `git log --format=%cI` hands us a
- * full timestamp with a timezone offset, which is unreadable in Obsidian's
- * properties panel and is all this plugin ever uses it for. A date-only ISO value
- * reads as a date there, still sorts chronologically as plain text, and is still
- * valid input to `Date.parse` for anything that needs the time of day.
+ * Date-only for the `last_commit` key, because `%cI` hands us a full timestamp with
+ * a timezone offset that is unreadable in Obsidian's properties panel. Date-only
+ * still reads as a date there, still sorts chronologically as plain text, and is
+ * still valid input to `Date.parse`.
  *
- * Returns null for null, and for anything that does not start with a date, so an
+ * Returns null for null and for anything not starting with a date, so an
  * unparseable commit date leaves the key out rather than writing junk.
  */
 export function isoDate(iso: string | null): string | null {

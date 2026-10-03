@@ -38,9 +38,8 @@ describe("buildArgv", () => {
 	});
 
 	it("passes the prompt as exactly one argv element for every provider", () => {
-		// A prompt that is a single argument cannot be split by a shell, because no
-		// shell is involved. This is the structural guarantee, independent of the
-		// metacharacter test below.
+		// A single argument cannot be split, because no shell is involved. The structural
+		// guarantee, independent of the metacharacter test below.
 		for (const id of ["gemini", "codex", "opencode"] as ProviderId[]) {
 			const args = buildArgv(id, "a b c  d");
 			assert.equal(args.filter((arg) => arg === "a b c  d").length, 1, `${id} did not pass the prompt whole`);
@@ -48,9 +47,9 @@ describe("buildArgv", () => {
 	});
 
 	it("does not let shell metacharacters change the argv structure", () => {
-		// Every one of these would be a command injection if the prompt were
-		// interpolated into a command string. The argv array is fixed in length and
-		// the prompt stays glued together as one element, whatever it contains.
+		// Every one of these would be a command injection if the prompt were interpolated
+		// into a command string. The argv array stays fixed in length and the prompt stays
+		// glued together as one element, whatever it contains.
 		const attacks = [
 			"; rm -rf /",
 			"`whoami`",
@@ -66,11 +65,8 @@ describe("buildArgv", () => {
 				const base = buildArgv(id, "SAFE");
 				const args = buildArgv(id, attack);
 
-				// Same length as the benign call, so nothing was split off.
 				assert.equal(args.length, base.length, `${id} changed argv length for ${JSON.stringify(attack)}`);
-				// The attack survives verbatim as exactly one element.
 				assert.ok(args.includes(attack), `${id} mangled ${JSON.stringify(attack)}`);
-				// Every fixed element is unchanged.
 				for (let i = 0; i < base.length; i++) {
 					if (base[i] === "SAFE") continue;
 					assert.equal(args[i], base[i], `${id} changed fixed element at ${i}`);
@@ -126,15 +122,13 @@ describe("extractOutput", () => {
 });
 
 describe("extractProviderError", () => {
-	// Every payload below was measured on this machine, not written from the
-	// CLIs' documentation. gemini's is the auth failure from `gemini -o json`;
-	// codex's is a full failing turn from `codex exec --json`; opencode's is what
-	// `opencode run --format json` prints for an unknown model.
+	// Every payload below was measured on this machine, not written from the CLIs'
+	// documentation: gemini's is its auth failure, codex's a full failing turn, opencode's
+	// what it prints for an unknown model.
 
 	it("reads gemini's auth failure and keeps the CLI's own wording", () => {
-		// Verbatim from gemini 0.42.0 on this machine. This is the shape that
-		// produced "gemini produced no readable output", because there is no
-		// `response` member for extractOutput to find.
+		// The shape that produced "gemini produced no readable output", because there is
+		// no `response` member for extractOutput to find.
 		const stdout = JSON.stringify({
 			session_id: "079faa20-8490-4bcc-b644-171775d2a189",
 			error: {
@@ -183,9 +177,8 @@ describe("extractProviderError", () => {
 	});
 
 	it("returns the last error, not codex's reconnect chatter", () => {
-		// The real order from `codex exec --json`: five `Reconnecting... N/5`
-		// events, then the terminal turn.failed. Taking the first match reported
-		// "Reconnecting... 2/5" as the cause of a 404, which is worse than useless.
+		// The real order: five `Reconnecting... N/5` events, then the terminal turn.failed.
+		// Taking the first match reported "Reconnecting... 2/5" as the cause of a 404.
 		const lines = [
 			JSON.stringify({ type: "thread.started", thread_id: "01a0" }),
 			JSON.stringify({ type: "error", message: "Reconnecting... 1/5 (unexpected status 404 Not Found)" }),
@@ -250,8 +243,8 @@ describe("extractProviderError", () => {
 	});
 
 	it("names the event type when an error event carries no message", () => {
-		// An unrecognised payload must still beat "produced no readable output",
-		// because the user at least learns the CLI said "error".
+		// An unrecognised payload must still beat "produced no readable output": the user
+		// at least learns the CLI said "error".
 		const message = extractProviderError("opencode", JSON.stringify({ type: "error", error: {} }));
 		assert.match(message ?? "", /opencode reported "error" with no message in it/);
 	});
@@ -374,9 +367,8 @@ describe("describeFailure", () => {
 });
 
 describe("runCommand", () => {
-	// Real processes, chosen because they are fast and deterministic. The point of
-	// these tests is the process handling: what happens when the binary is missing,
-	// when it crashes, and when it never returns.
+	// Real processes, chosen because they are fast and deterministic. The point here is the
+	// process handling: a missing binary, a crash, and a process that never returns.
 	const options = { timeoutMs: 15_000, cwd: process.cwd() };
 
 	it("returns stdout on success", async () => {
@@ -419,21 +411,19 @@ describe("runCommand", () => {
 	});
 
 	it("does not leave stdin open for a child that reads it", async () => {
-		// The bug that stopped generation working for every provider. `execFile` always
-		// hands the child a stdin pipe that nothing writes to and never closes, and a
-		// CLI that reads stdin waits on it forever: measured, opencode answers in
-		// 13-20s under `spawn` and never at all under `execFile`. `cat` with no
-		// argument is the cheapest thing that blocks on stdin, so if stdin were left
-		// open this would hit the limit instead of returning.
+		// The bug that stopped generation working for every provider: `execFile` always hands
+		// the child a stdin pipe nothing writes to and never closes, and a CLI that reads
+		// stdin waits on it forever. `cat` with no argument is the cheapest thing that
+		// blocks on stdin, so if stdin were left open this would hit the limit.
 		const result = await runCommand("cat", [], { ...options, timeoutMs: 2_000 });
 		assert.equal(result.ok, true);
 		assert.equal(result.ok && result.stdout, "");
 	});
 
 	it("returns when a killed command leaves a grandchild on the pipe", async () => {
-		// `sh` dies from the SIGKILL but the `sleep` it started inherits stdout, and
-		// waiting for a pipe nobody closes is how a timeout becomes a much longer
-		// freeze. Measured at 30s for a 200ms limit before this was handled.
+		// `sh` dies from the SIGKILL but the `sleep` it started inherits stdout, and waiting
+		// for a pipe nobody closes is how a timeout becomes a much longer freeze. Measured
+		// at 30s for a 200ms limit before this was handled.
 		const started = Date.now();
 		const result = await runCommand("sh", ["-c", "sleep 30 & wait"], { ...options, timeoutMs: 300 });
 		const elapsed = Date.now() - started;
@@ -445,16 +435,13 @@ describe("runCommand", () => {
 });
 
 describe("runProvider with a substituted command", () => {
-	// The provider layer's real behaviour, exercised through the same entry point
-	// the plugin calls, with the process swapped for something predictable. This
-	// covers the wiring between spawn, extract, and parse without depending on
-	// which CLIs happen to be installed or authenticated on the machine running
-	// the tests.
+	// The provider layer's real behaviour through the entry point the plugin calls, with the
+	// process swapped for something predictable. Covers the wiring between spawn, extract
+	// and parse without depending on which CLIs the machine happens to have authenticated.
 	const options = { timeoutMs: 15_000, cwd: process.cwd() };
 
 	it("writes nothing when the provider is missing", async () => {
 		const result = await runProvider("gemini", "x", { ...options, cwd: "/nonexistent-dir-for-test" });
-		// No throw, and a reason rather than silence.
 		assert.equal(result.ok, false);
 		assert.equal("summary" in (result as object), false);
 	});
@@ -468,11 +455,10 @@ describe("runProvider with a substituted command", () => {
 });
 
 describe("runProvider surfaces the CLI's own error", () => {
-	// The bug this whole block exists for: gemini prints a failure as JSON, exits
-	// without a usable reply, and the user saw "gemini produced no readable output"
-	// instead of the auth instructions. These drive `runProvider` with a stub
-	// executable so the exit-status and stream combinations can both be produced
-	// deterministically, because the real gemini only produces one of them here.
+	// The bug this whole block exists for: gemini prints a failure as JSON, exits without a
+	// usable reply, and the user saw "gemini produced no readable output" instead of the
+	// auth instructions. Stub executables so the exit-status and stream combinations can both
+	// be produced deterministically; the real gemini only produces one of them here.
 
 	const options = { timeoutMs: 15_000, cwd: process.cwd() };
 	const AUTH_JSON = JSON.stringify({
@@ -486,11 +472,9 @@ describe("runProvider surfaces the CLI's own error", () => {
 	});
 
 	/**
-	 * A stub on PATH named after the provider it replaces.
-	 *
-	 * Named per provider on purpose: `runProvider` resolves the program name from
-	 * the provider id, so one stub called `gemini` silently leaves `codex` calling
-	 * the real codex, which is what the first version of this helper did.
+	 * A stub on PATH named after the provider it replaces. Named per provider because
+	 * `runProvider` resolves the program name from the provider id, so a single stub called
+	 * `gemini` silently leaves `codex` calling the real codex.
 	 */
 	function stubProvider(provider: ProviderId, script: string, status: number): () => void {
 		const dir = mkdtempSync(path.join(tmpdir(), "pt-stub-"));
@@ -609,10 +593,9 @@ describe("probe argv", () => {
 	it("uses the same shape as generation, plus codex's repo-check bypass", () => {
 		assert.deepEqual(buildProbeArgv("gemini"), buildArgv("gemini", PROBE_PROMPT));
 		assert.deepEqual(buildProbeArgv("opencode"), buildArgv("opencode", PROBE_PROMPT));
-		// The probe runs outside a repository and codex refuses to start there:
-		// "Not inside a trusted directory and --skip-git-repo-check was not
-		// specified." (codex 0.141.0). Generation does not need the flag because it
-		// runs inside the repo itself.
+		// The probe runs outside a repository and codex refuses to start there ("Not inside a
+		// trusted directory", codex 0.141.0). Generation does not need the flag: it runs
+		// inside the repo itself.
 		assert.deepEqual(buildProbeArgv("codex"), [...buildArgv("codex", PROBE_PROMPT), "--skip-git-repo-check"]);
 	});
 
@@ -637,12 +620,10 @@ describe("probe argv", () => {
 /**
  * Run `run` with PATH containing only the given stub executables.
  *
- * PATH is replaced rather than extended, so nothing on the host leaks in: a
- * provider with no stub here is genuinely absent, whichever CLIs the machine
- * running the tests happens to have installed. `sh`, `cat` and `sleep` are
- * symlinked in because the stubs are shell scripts; everything else those scripts
- * use, `printf`, `echo`, `pwd`, `sleep` and redirection, is a shell builtin or
- * absolute.
+ * PATH is replaced rather than extended, so nothing on the host leaks in: a provider with no
+ * stub here is genuinely absent, whichever CLIs the machine has installed. `sh`, `cat` and
+ * `sleep` are symlinked in because the stubs are shell scripts; everything else those scripts
+ * use is a shell builtin or absolute.
  */
 function sandbox(stubs: Partial<Record<ProviderId, string>>, run: () => void): void {
 	const dir = buildSandbox(stubs);
@@ -695,12 +676,10 @@ function buildSandbox(stubs: Partial<Record<ProviderId, string>>): string {
 }
 
 /**
- * One success stub per provider, each in that CLI's real output shape.
- *
- * Per provider rather than shared, because the reply travels in a different place
- * in each envelope: gemini has a `response` member, codex an `agent_message`
- * item, opencode a `text` part. A single stub would make two of the three read as
- * broken, which is a correct verdict for the wrong reason.
+ * One success stub per provider, each in that CLI's real output shape, because the reply
+ * travels in a different place in each envelope: gemini a `response` member, codex an
+ * `agent_message` item, opencode a `text` part. A single stub would make two of the three
+ * read as broken, a correct verdict for the wrong reason.
  */
 const REPLIES: Record<ProviderId, string> = {
 	gemini: `cat <<'EOF'
@@ -729,14 +708,13 @@ const ALL_ANSWER: Record<ProviderId, string> = {
 };
 
 describe("probeCapability", () => {
-	// Driven through stub executables rather than the real CLIs. A suite that makes
-	// a live model call is slow, costs money, and fails whenever the machine's auth
-	// or quota changes. The real CLIs are exercised by the separate end-to-end
-	// probe check, which is not part of `node --test`.
+	// Stub executables, not the real CLIs. A suite that makes a live model call is slow,
+	// costs money, and fails whenever the machine's auth or quota changes. The real CLIs
+	// are exercised by a separate end-to-end probe check outside `node --test`.
 
 	it("reports absent when the binary is not on PATH", () => {
-		// Absent and broken are different problems with different fixes: install
-		// something versus authenticate something. They must not collapse into one.
+		// Absent and broken are different problems with different fixes: install something
+		// versus authenticate something. They must not collapse into one.
 		sandbox({}, () => {
 			const probe = probeCapability("gemini", { timeoutMs: 5_000 });
 			assert.equal(probe.state, "absent");
@@ -745,9 +723,9 @@ describe("probeCapability", () => {
 	});
 
 	it("reports broken, with the CLI's message, when the CLI cannot answer", () => {
-		// gemini's real auth failure. Pretty-printed across several lines, which is
-		// how `-o json` renders it: measured on gemini 0.42.0, a line-only reader saw
-		// no parsable line at all and fell back to printing `{` as the reason.
+		// gemini's real auth failure, pretty-printed across several lines the way `-o json`
+		// renders it. Measured on 0.42.0: a line-only reader saw no parsable line at all
+		// and fell back to printing `{` as the reason.
 		sandbox(
 			{
 				gemini: `cat >&2 <<'EOF'

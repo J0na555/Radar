@@ -21,11 +21,9 @@ export interface RepoFacts {
 	/** Absolute path of the configured scan root. */
 	root: string;
 	/**
-	 * True when git could read this repository.
-	 *
-	 * False means the probes returned null for a reason other than the value being
-	 * absent, so every absent value here is unreliable and must not be written over
-	 * good data already on disk.
+	 * True when git could read this repository. False means the probes returned
+	 * null for a reason other than the value being absent, so every absent value
+	 * here is unreliable and must not be written over good data already on disk.
 	 */
 	gitReadable: boolean;
 	/** Origin remote URL, or null when the repo has no `origin`. */
@@ -50,10 +48,8 @@ export interface RepoFacts {
 	stashCount: number | null;
 	/**
 	 * Commits on this branch that its upstream does not have, or null when there
-	 * is no upstream to compare against or the probe failed.
-	 *
-	 * A repo with no remote has no upstream, so this is null on every repo that
-	 * was never pushed, which is a normal state rather than a warning.
+	 * is no upstream or the probe failed. A repo with no remote has no upstream, so
+	 * this is null on every repo that was never pushed: normal, not a warning.
 	 */
 	unpushedCount: number | null;
 	/** Filesystem mtime of the repo directory, in epoch millis. */
@@ -106,9 +102,8 @@ export type HealthSignalId = "sustained-dirty" | "long-branch" | "stashed" | "un
 /**
  * One health warning, as the row shows it.
  *
- * A `badge` and a `detail`, and never a bare number. The row is a list of 45
- * projects; putting a count next to each one for every possible problem is how
- * the panel became unreadable in the first place.
+ * A `badge` and a `detail`, never a bare number: a count beside each of 45
+ * projects for every possible problem is how the panel became unreadable.
  */
 export interface HealthSignal {
 	id: HealthSignalId;
@@ -125,26 +120,20 @@ export interface Project {
 	/** User-controlled rank. 0 means unpinned. Lower sorts first. */
 	pin: number;
 	/**
-	 * Health warnings that fired for this repo on the last scan.
-	 *
-	 * Empty for a healthy repo, which is the normal case and the whole point:
-	 * only a firing signal earns any space on the row.
+	 * Health warnings that fired on the last scan. Empty for a healthy repo, which
+	 * is the normal case: only a firing signal earns any space on the row.
 	 */
 	health: HealthSignal[];
 	/** Absolute vault path of the per-project note, once synced. */
 	notePath?: string;
 	/**
-	 * What is known about the project's AI summary, filled in on every scan.
-	 *
-	 * Absent `summary` means no summary note exists, which is the normal case:
-	 * notes are created only when the user asks for one.
+	 * What is known about the AI summary, refilled on every scan. Absent means no
+	 * summary note exists, which is normal: notes are created on request only.
 	 */
 	summary?: SummaryState;
 }
 
-/**
- * Freshness of a project's AI summary, as read back from the summary note.
- */
+/** Freshness of a project's AI summary, as read back from the summary note. */
 export interface SummaryState {
 	/** Vault path of the sibling `<name>-ai.md` note. */
 	path: string;
@@ -209,8 +198,7 @@ export type ProbeState = "works" | "broken" | "absent";
  *
  * Three states, not two. "Installed" and "usable" are different facts, and
  * collapsing them is what hid a failure: gemini is installed on this machine and
- * passes `--version` with exit 0 while being unable to authenticate, so a
- * boolean `available` reported it as fine.
+ * passes `--version` with exit 0 while being unable to authenticate.
  */
 export interface ProviderProbe {
 	provider: ProviderId;
@@ -238,21 +226,18 @@ export interface PluginSettings {
 	/** Show projects with no live work and no commit in the last 30 days. */
 	showDormant: boolean;
 	/**
-	 * Show the "why this score" line under every project name.
-	 *
-	 * Off by default because it doubles the height of a 45-row list, which is the
-	 * cost that made the bare number unreadable in the first place. The tooltip on
-	 * the score is always there either way.
+	 * Show the "why this score" line under every project name. Off by default
+	 * because it doubles the height of a 45-row list, which is the cost that made
+	 * the bare number unreadable. The score tooltip is there either way.
 	 */
 	explainScores: boolean;
 	/** Points the score model awards. */
 	weights: ScoreWeights;
 	/**
-	 * CLI used to generate AI summaries, or null to use the detected one.
-	 *
-	 * null is the default, which is what makes detection mean anything: a fresh
-	 * install has made no choice and detection picks for it, and anything the
-	 * user does pick is an override that detection never quietly replaces.
+	 * CLI used to generate AI summaries, or null to use the detected one. null is
+	 * the default, which is what makes detection mean anything: a fresh install
+	 * has made no choice, and anything the user does pick is an override that
+	 * detection never quietly replaces.
 	 */
 	provider: ProviderId | null;
 	/** Recent commits handed to the model as context. */
@@ -261,12 +246,9 @@ export interface PluginSettings {
 	timeoutSeconds: number;
 	/**
 	 * Command that opens a project folder, or "" to reveal the folder in the OS
-	 * file manager instead.
-	 *
-	 * Empty by default and not auto-detected. Which editor someone uses is not a
-	 * fact a plugin can guess, and a ranking of what to try would be a guess. The
-	 * empty case is a real behaviour rather than an error, so a fresh install gets
-	 * something harmless.
+	 * file manager instead. Empty by default and not auto-detected: which editor
+	 * someone uses is not a fact a plugin can guess, and so is a ranking of what
+	 * to try. The empty case is a real behaviour, not an error.
 	 */
 	editorCommand: string;
 	/** Cached provider detection, with the time it was taken. */

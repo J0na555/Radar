@@ -1,34 +1,25 @@
 /**
- * Append-only file logging, shared by `startup.log` and `errors.log`.
+ * Append-only file logging, shared by `startup.log` and `errors.log`. Both logs grew out of
+ * one pattern, and a second near-identical writer would leave two places to fix every disk,
+ * encoding and rotation bug, so the pattern lives here once.
  *
- * Two logs with the same needs grew out of one pattern: load failures during
- * onload, and generation failures afterwards. Forking a second near-identical
- * writer for the second log would leave two places to fix every disk, encoding,
- * and rotation bug, so the pattern lives here once and each log supplies only its
- * own filename and entry format.
- *
- * Nothing here imports `obsidian`. The path is passed in, structurally typed
- * rather than declared as a `Plugin`, so `node --test` can exercise rotation and
- * truncation against a real temp file with no bundler and no GUI.
+ * Nothing here imports `obsidian`: the path is passed in and structurally typed, so
+ * `node --test` can exercise rotation and truncation against a real temp file with no
+ * bundler and no GUI.
  */
 import { appendFileSync, closeSync, openSync, readSync, statSync, writeFileSync } from "fs";
 
 /**
- * Default cap on one log file.
- *
- * Startup traces are a few kilobytes a session. Generation errors are rarer but
- * carry a CLI's own message, which can run to a few hundred bytes each, so this
- * is generous for both while still bounding the file.
+ * Default cap on one log file, generous enough for a few kilobytes of startup trace or a few
+ * hundred bytes per CLI error message while still bounding the file.
  */
 export const DEFAULT_MAX_BYTES = 256 * 1024;
 
 /**
- * The slice of `Plugin` needed to find the plugin folder.
- *
- * Structural on purpose: `Plugin` satisfies this without an import of `obsidian`,
- * which keeps this file runnable under `node --test`. `getFullPath` is declared
- * on `FileSystemAdapter` rather than on `DataAdapter`, so it is narrowed here at
- * runtime rather than assumed by the type.
+ * The slice of `Plugin` needed to find the plugin folder. Structural on purpose: `Plugin`
+ * satisfies this without an import of `obsidian`, which keeps this file runnable under
+ * `node --test`. `getFullPath` sits on `FileSystemAdapter` rather than `DataAdapter`, so it
+ * is narrowed here at runtime rather than assumed by the type.
  */
 export interface PluginFolder {
 	manifest: { dir?: string | undefined };
@@ -36,11 +27,9 @@ export interface PluginFolder {
 }
 
 /**
- * Absolute path of `fileName` inside this plugin's folder, or null when it cannot
- * be resolved.
- *
- * Null is a normal answer, not an error: a mobile vault, or one whose adapter has
- * no `getFullPath`, has no plugin folder to write into.
+ * Absolute path of `fileName` inside this plugin's folder, or null when it cannot be resolved.
+ * Null is a normal answer, not an error: a mobile vault, or one whose adapter has no
+ * `getFullPath`, has no plugin folder to write into.
  */
 export function resolvePluginFolderPath(plugin: PluginFolder, fileName: string): string | null {
 	const dir = plugin.manifest.dir;
@@ -51,24 +40,23 @@ export function resolvePluginFolderPath(plugin: PluginFolder, fileName: string):
 }
 
 /**
- * Append-only log with a size cap, in one file at a stable path.
+ * Append-only log with a size cap, in one file at a stable path. Trimming happens in place
+ * rather than by rotating to `errors.log.1`, because the plugin names this exact path in the
+ * notice it shows the user, and a second file is one more place to go looking once something
+ * has already gone wrong.
  *
- * Trimming happens in place rather than by rotating to `errors.log.1`, because
- * the plugin names this exact path in the notice it shows the user. A second file
- * would be one more place to go looking when something has already gone wrong.
- *
- * Writing is best effort throughout. A logger that throws is its own outage, so
- * every filesystem call is swallowed and `wroteToDisk` reports whether the caller
- * can honestly claim a log exists.
+ * Writing is best effort throughout. A logger that throws is its own outage, so every
+ * filesystem call is swallowed and `wroteToDisk` reports whether the caller can honestly
+ * claim a log exists.
  */
 export class LogWriter {
 	private readonly path: string | null;
 	private readonly maxBytes: number;
 	private wroteToDisk = false;
 
-	// Explicit fields rather than constructor parameter properties: this file is
-	// imported directly by `node --test`, and Node's TypeScript support is
-	// strip-only, which cannot erase a parameter property.
+	// Explicit fields rather than constructor parameter properties: this file is imported
+	// directly by `node --test`, and Node's TypeScript support is strip-only, which cannot
+	// erase a parameter property.
 	constructor(path: string | null, maxBytes: number = DEFAULT_MAX_BYTES) {
 		this.path = path;
 		this.maxBytes = maxBytes;
@@ -100,8 +88,8 @@ export class LogWriter {
 		if (!this.path) return;
 		const text = this.bound(ensureNewline(entry));
 		try {
-			// Byte length, not string length. The cap is about what lands on disk,
-			// and `"å".repeat(1000)` is 1000 characters but 2000 bytes.
+			// Byte length, not string length: the cap is about what lands on disk, and
+			// `"å".repeat(1000)` is 1000 characters but 2000 bytes.
 			this.trim(Buffer.byteLength(text, "utf8"));
 			appendFileSync(this.path, text);
 			this.wroteToDisk = true;
@@ -111,15 +99,12 @@ export class LogWriter {
 	}
 
 	/**
-	 * Cap a single entry against the whole budget.
+	 * Cap a single entry against the whole budget. Without this a long entry escapes the cap:
+	 * a CLI can print a megabyte of stack trace, and trimming only compares against what is
+	 * already in the file, so the first huge append would grow the file without limit.
 	 *
-	 * Without this a long entry escapes the cap: a CLI can print a megabyte of
-	 * stack trace, and trimming only ever compares against what is already in the
-	 * file, so the first huge append would grow the file without limit.
-	 *
-	 * Cut on a byte budget and iterate by code point, so a multi-byte character is
-	 * either wholly kept or wholly dropped. Slicing by index would split one in
-	 * half and write a broken glyph.
+	 * Cut on a byte budget and iterate by code point, so a multi-byte character is either
+	 * wholly kept or wholly dropped. Slicing by index would split one in half.
 	 */
 	private bound(text: string): string {
 		if (Buffer.byteLength(text, "utf8") <= this.maxBytes) return text;
@@ -139,13 +124,10 @@ export class LogWriter {
 	}
 
 	/**
-	 * Drop the oldest lines so `incoming` more bytes still fit under the cap.
-	 *
-	 * Only the tail worth keeping is ever read, so adopting an already-huge file
-	 * costs a fixed amount of I/O rather than its whole size. The cut lands on a
-	 * newline so the first surviving entry is a whole entry, which also means a
-	 * cut through a multi-byte character discards that character instead of
-	 * writing half of one.
+	 * Drop the oldest lines so `incoming` more bytes still fit under the cap. Only the tail
+	 * worth keeping is ever read, so adopting an already-huge file costs a fixed amount of
+	 * I/O rather than its whole size. The cut lands on a newline so the first surviving
+	 * entry is a whole entry.
 	 */
 	private trim(incoming: number): void {
 		const path = this.path;
@@ -163,9 +145,9 @@ export class LogWriter {
 		const header = `--- Project Tracker log trimmed at ${new Date().toISOString()}; older lines above were removed ---\n`;
 		const keep = this.maxBytes - incoming - header.length;
 		if (keep <= 0) {
-			// A cap so small the incoming entry nearly fills it alone. The entry is
-			// worth more than the marker, and `incoming` is already bounded to the
-			// cap, so emptying the file here keeps the size invariant either way.
+			// A cap so small the incoming entry nearly fills it alone. The entry is worth more
+			// than the marker, and `incoming` is already bounded to the cap, so emptying the
+			// file keeps the size invariant either way.
 			writeFileSync(path, "");
 			return;
 		}
@@ -176,8 +158,8 @@ export class LogWriter {
 			readSync(fd, tail, 0, keep, size - keep);
 			const newline = tail.indexOf(0x0a);
 			if (newline === -1) {
-				// Nothing whole survives the cut, so there is nothing to keep but
-				// the marker saying the rest is gone.
+				// Nothing whole survives the cut, so there is nothing to keep but the
+				// marker saying the rest is gone.
 				writeFileSync(path, header);
 				return;
 			}
@@ -203,13 +185,10 @@ export interface ErrorEntry {
 }
 
 /**
- * The durable record of generation failures.
- *
- * This exists because the alternative was a failure nobody could see. A summary
- * error went to a transient Notice and nowhere else, so an auth error printed by
- * a CLI was unreadable without the devtools console. Everything lands in
- * `errors.log` in the plugin folder instead: timestamp, provider, project, and
- * the message, which is the CLI's own words whenever the CLI supplied any.
+ * The durable record of generation failures. This exists because the alternative was a
+ * failure nobody could see: a summary error went to a transient Notice and nowhere else, so
+ * an auth error printed by a CLI was unreadable without the devtools console. Everything
+ * lands in `errors.log` instead: timestamp, provider, project, and the CLI's own words.
  */
 export class ErrorLog {
 	/** Name of the file in the plugin folder, named in every notice that points at it. */
@@ -227,9 +206,9 @@ export class ErrorLog {
 	}
 
 	/**
-	 * Sentence for a notice, telling the user where the detail is. Says so
-	 * plainly when the log could not be written, because a notice pointing at a
-	 * file that does not exist is worse than no notice.
+	 * Sentence for a notice, telling the user where the detail is. Says so plainly when the
+	 * log could not be written, because a notice pointing at a file that does not exist is
+	 * worse than no notice.
 	 */
 	get whereSentence(): string {
 		return this.writer.written
@@ -242,9 +221,8 @@ export class ErrorLog {
 		const stamp = new Date().toISOString();
 		const provider = entry.provider.trim() || "unknown";
 		const project = entry.project.trim() || "unknown";
-		// The blank line matters: without it a multi-line message runs straight
-		// into the next entry's timestamp and the log becomes unreadable, which is
-		// the only reason it exists.
+		// The blank line matters: without it a multi-line message runs straight into the next
+		// entry's timestamp and the log becomes unreadable, which is the only reason it exists.
 		this.writer.append(
 			`${stamp}  provider=${provider}  project=${project}\n${indent(entry.message)}\n\n`,
 		);

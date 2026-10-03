@@ -259,13 +259,6 @@
 	height: 14px;
 }
 
-.pt-hidden-note,
-.pt-empty {
-	font-size: var(--font-ui-smaller, 0.85em);
-	color: var(--text-faint);
-	padding: 8px;
-	font-style: italic;
-}
 
 /* The weight sliders, as one group. Nine rows is enough to need a heading. */
 .pt-weights {
@@ -337,4 +330,10 @@
 	flex-shrink: 0;
 	color: var(--text-faint);
 	font-family: var(--font-monospace);
+}
+
+.pt-body {
+	flex: 1;
+	overflow-y: auto;
+	min-height: 0;
 }

@@ -325,7 +325,13 @@ export default class ProjectTrackerPlugin extends Plugin {
 	 */
 	async savePin(project: Project): Promise<boolean> {
 		const path = await syncProjectNote(this.app, this.settings, project.facts, project.score, project.pin);
-		return path !== null;
+		if (path !== null) {
+			if (!project.notePath) {
+				project.notePath = path;
+			}
+			return true;
+		}
+		return false;
 	}
 
 	/**

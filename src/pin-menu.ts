@@ -15,9 +15,9 @@ import type { Project } from "./types";
 /**
  * Rank for "Pin last".
  *
- * A number no pinned project can hold, because `pin` is a plain number the panel
- * has never clamped, and ranks sort ascending, so this lands at the bottom of the
- * pinned group.
+ * Used as the target rank when pinning an unpinned project to the bottom of the
+ * pinned group. Note: hand-edited frontmatter could have a pinned project at
+ * this rank; the value is a target, not a guaranteed "unused" rank.
  */
 export const LAST_PIN = 9999;
 
@@ -37,52 +37,96 @@ export interface PinMenuActions {
 	editorLabel: string;
 }
 
-/** Build and show the menu for one project at the mouse. */
-export function showPinMenu(event: MouseEvent, project: Project, actions: PinMenuActions): void {
-	const menu = new Menu();
+/** A menu item in the pin menu plan. */
+export interface PinMenuPlanItem {
+	title: string;
+	icon: string;
+	/** Pin rank to write, or undefined if this item does not pin. */
+	pin?: number;
+	/** Action key to perform (not clicking - just identifying the action). */
+	action: "togglePin" | "moveUp" | "moveDown" | "pinLast" | "openSummary" | "openEditor" | "openNote";
+}
+
+/** Pure plan for pin menu items - testable without Obsidian. */
+export function pinMenuPlan(
+	project: Pick<Project, "pin" | "summary">,
+	topRank: number,
+): PinMenuPlanItem[] {
+	const items: PinMenuPlanItem[] = [];
 	const isPinned = project.pin > 0;
 
-	menu.addItem((item) =>
-		item
-			.setTitle(isPinned ? "Unpin" : "Pin to top")
-			.setIcon(isPinned ? "x" : "pin")
-			.onClick(() => actions.onPin(project, isPinned ? 0 : actions.topRank)),
-	);
+	items.push({
+		title: isPinned ? "Unpin" : "Pin to top",
+		icon: isPinned ? "x" : "pin",
+		pin: isPinned ? 0 : topRank,
+		action: "togglePin",
+	});
 
 	if (isPinned) {
 		// Ranks are the user's own numbers, so "one step" is arithmetic rather than a
 		// swap: two pinned projects at 1 and 2 that both move up end up tied, which
 		// the name ordering then separates.
 		//
-		// "Move up" is hidden once the project is already at `topRank`, which is the
-		// highest rank anything can take. Without that it would subtract 1 from rank 1
-		// and land on 0, and 0 is not "one above the first pin", it is unpinned: the
-		// project would disappear from the pinned group with no unpin having been
-		// asked for.
-		if (project.pin > actions.topRank) {
-			menu.addItem((item) =>
-				item
-					.setTitle("Move up")
-					.setIcon("arrow-up")
-					.onClick(() => actions.onPin(project, Math.max(1, project.pin - 1))),
-			);
+		// "Move up" is hidden once the project is already at or at the top boundary
+		// where moving up would land at 0 (unpinned). Clamp to not go below 1.
+		if (project.pin > 1) {
+			items.push({
+				title: "Move up",
+				icon: "arrow-up",
+				pin: Math.max(1, project.pin - 1),
+				action: "moveUp",
+			});
 		}
-		menu.addItem((item) =>
-			item.setTitle("Move down").setIcon("arrow-down").onClick(() => actions.onPin(project, project.pin + 1)),
-		);
+		items.push({
+			title: "Move down",
+			icon: "arrow-down",
+			pin: project.pin + 1,
+			action: "moveDown",
+		});
 	} else {
-		menu.addItem((item) =>
-			item.setTitle("Pin last").setIcon("pin").onClick(() => actions.onPin(project, LAST_PIN)),
-		);
+		items.push({
+			title: "Pin last",
+			icon: "pin",
+			pin: LAST_PIN,
+			action: "pinLast",
+		});
 	}
 
 	if (project.summary) {
-		menu.addItem((item) =>
-			item
-				.setTitle("Open AI summary")
-				.setIcon("bot")
-				.onClick(() => actions.onOpenSummary(project)),
-		);
+		items.push({
+			title: "Open AI summary",
+			icon: "bot",
+			action: "openSummary",
+		});
+	}
+
+	return items;
+}
+
+/** Build and show the menu for one project at the mouse. */
+export function showPinMenu(event: MouseEvent, project: Project, actions: PinMenuActions): void {
+	const menu = new Menu();
+	const plan = pinMenuPlan(project, actions.topRank);
+
+	for (const item of plan) {
+		if (item.action === "togglePin" || item.action === "moveUp" || item.action === "moveDown" || item.action === "pinLast") {
+			menu.addItem((mi) =>
+				mi
+					.setTitle(item.title)
+					.setIcon(item.icon)
+					.onClick(() => actions.onPin(project, item.pin ?? 0)),
+			);
+			continue;
+		}
+		if (item.action === "openSummary") {
+			menu.addItem((mi) =>
+				mi
+					.setTitle(item.title)
+					.setIcon(item.icon)
+					.onClick(() => actions.onOpenSummary(project)),
+			);
+			continue;
+		}
 	}
 
 	menu.addSeparator();

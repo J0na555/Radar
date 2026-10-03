@@ -19,7 +19,7 @@
 import { setIcon } from "obsidian";
 import { relativeAge } from "./format";
 import { describeScore } from "./rank";
-import type { HealthSignal, Project, ProjectStatus, ScoreResult } from "./types";
+import type { HealthSignal, Project, ScoreResult } from "./types";
 
 /** What one row needs to draw itself, and what its controls should do. */
 export interface ProjectRowOptions {
@@ -64,7 +64,7 @@ export function createProjectRow(doc: Document, options: ProjectRowOptions): HTM
 	if (pinned) classes.push("is-pinned");
 	if (selected) classes.push("is-selected");
 	if (weak) classes.push("is-weak");
-	if (project.score.status !== "active") classes.push(`is-${project.score.status satisfies ProjectStatus}`);
+	if (project.score.status !== "active") classes.push(`is-${project.score.status}`);
 
 	const row = doc.createElement("div");
 	row.className = classes.join(" ");

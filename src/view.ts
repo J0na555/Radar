@@ -50,7 +50,6 @@ export class ProjectTrackerView extends ItemView {
 	 * typed a query that hid it, and "client" landed at index 3. Same index, different
 	 * row, and the new one has never been scrolled to.
 	 */
-	private scrolledToName: string | null = null;
 	/**
 	 * What is on screen, in display order.
 	 *
@@ -58,6 +57,7 @@ export class ProjectTrackerView extends ItemView {
 	 * into this list and two parallel arrays would be two things to keep in step.
 	 */
 	private visible: { row: FilterRow; el: HTMLElement }[] = [];
+
 
 	private header: PanelHeader | null = null;
 	private keyHandlers: KeymapEventHandler[] = [];
@@ -186,9 +186,8 @@ export class ProjectTrackerView extends ItemView {
 
 		// Emptying a scrolling container clamps its scrollTop to zero, so the position
 		// is saved and put back around the rebuild. Without this the panel jumps back to
-		// the top on every keystroke in the filter box. Both elements are saved because
-		// either one could be the one that scrolls, depending on the theme.
-		const scrolled = [this.contentEl.scrollTop, header.rowsEl.scrollTop];
+		// the top on every keystroke in the filter box.
+		const scrolled = header.rowsEl.scrollTop;
 
 		const els = drawPanelBody(this.doc, header.rowsEl, result, {
 			selectedIndex: this.selectedIndex,
@@ -208,25 +207,49 @@ export class ProjectTrackerView extends ItemView {
 		});
 		this.visible = result.rows.map((row, index) => ({ row, el: els[index] }));
 
-		this.contentEl.scrollTop = scrolled[0];
-		header.rowsEl.scrollTop = scrolled[1];
+		header.rowsEl.scrollTop = scrolled;
 		this.scrollSelectionIntoView();
 	}
 
 	/**
-	 * Keep the selected row on screen, but only when the selection actually moved.
+	 * Keep the selected row on screen, but only when it is not already visible.
 	 *
 	 * Scrolling on every render would fight the user: a summary finishing in the
-	 * background would drag the viewport back to the cursor mid-scroll. So this
-	 * compares the selected project by name and does nothing when it is the same one
-	 * as last time, including doing nothing when there is no selection at all.
+	 * background would drag the viewport back to the cursor mid-scroll. The old
+	 * check compared by project name, which conflates "same project" with "same
+	 * place on screen". For example, pinning a row at index 20 can move it into
+	 * the pinned group at index 0 while the cursor follows it by name; if
+	 * `scrolledToName` is unchanged, the early return fires and the highlight can
+	 * end up off screen. Pressing `p` again would then appear to do nothing.
+	 *
+	 * Instead, after the scroll restore, check whether the selected element is
+	 * actually inside its scroll container's visible box and scroll only if it is
+	 * not. This is O(1), handles pin, unpin, filter and `j`/`k` uniformly, and
+	 * still protects against background renders yanking the viewport: if the
+	 * element is already visible, we do not scroll. This preserves the property
+	 * the name check was protecting without the false positive that broke the
+	 * flagship `p` interaction.
 	 */
 	private scrollSelectionIntoView(): void {
 		const selected = this.visible[this.selectedIndex];
-		const name = selected?.row.project.facts.name ?? null;
-		if (name === this.scrolledToName) return;
-		this.scrolledToName = name;
-		selected?.el.scrollIntoView({ block: "nearest" });
+		if (!selected) return;
+		const el = selected.el;
+		const container = el.offsetParent as HTMLElement | null;
+		const scrollContainer = container ?? el.parentElement;
+		if (!scrollContainer) {
+			el.scrollIntoView({ block: "nearest" });
+			return;
+		}
+		const containerRect = scrollContainer.getBoundingClientRect();
+		const elRect = el.getBoundingClientRect();
+		const isVisible =
+			elRect.top >= containerRect.top - 1 &&
+			elRect.bottom <= containerRect.bottom + 1 &&
+			elRect.left >= containerRect.left - 1 &&
+			elRect.right <= containerRect.right + 1;
+		if (!isVisible) {
+			el.scrollIntoView({ block: "nearest" });
+		}
 	}
 
 	/** The filter the panel is showing, with the persisted dormant setting folded in. */

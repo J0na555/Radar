@@ -246,6 +246,15 @@ export interface MachineState {
 	previousDirty: Record<string, number>;
 	/** What each AI summary was written from, per project name. */
 	summaries: Record<string, SummaryRecord>;
+	/**
+	 * True once the v0.1 summary notes have been copied into the dashboard.
+	 *
+	 * Its own flag rather than part of `version`, because it is not a shape change: bumping the
+	 * version would re-run the state seed too. It is also not safely repeatable, unlike the seed.
+	 * Re-importing would overwrite a summary the user had since regenerated with the older text,
+	 * so this runs once and stays run.
+	 */
+	legacySummariesImported: boolean;
 }
 
 /** How a provider actually behaves, which is three states and not two. */

@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-	applyLegacyNotes,
-	emptyMachineState,
 	MAX_DIRTY_COUNT,
 	MAX_PIN_RANK,
+	STATE_VERSION,
+	applyLegacyNotes,
+	emptyMachineState,
+	needsLegacyImport,
 	needsLegacySeed,
 	pinRankFor,
 	previousDirtyFor,
 	sanitizeMachineState,
 	stampFromLegacySummary,
 	stateFromRecord,
-	STATE_VERSION,
 } from "./machine-state.ts";
 import type { LegacySummaryFrontmatter } from "./machine-state.ts";
 import type { MachineState, RepoFacts, SummaryRecord } from "./types.ts";
@@ -161,7 +162,13 @@ describe("sanitizeMachineState", () => {
 		const second = sanitizeMachineState({ pins: { a: 1 } });
 		first.pins.b = 2;
 		assert.deepEqual(second.pins, { a: 1 });
-		assert.deepEqual(emptyMachineState(), { version: 0, pins: {}, previousDirty: {}, summaries: {} });
+		assert.deepEqual(emptyMachineState(), {
+			version: 0,
+			pins: {},
+			previousDirty: {},
+			summaries: {},
+			legacySummariesImported: false,
+		});
 	});
 });
 
@@ -301,6 +308,7 @@ describe("applyLegacyNotes", () => {
 			pins: { "monk-mode": 1 },
 			previousDirty: { "monk-mode": 0 },
 			summaries: { "monk-mode": { generatedAt: "2026-10-01T00:00:00.000Z", commit: "newer", dirtyCount: 5 } },
+			legacySummariesImported: true,
 		};
 		const state = applyLegacyNotes(current, [
 			{
@@ -352,5 +360,31 @@ describe("applyLegacyNotes", () => {
 		const state = applyLegacyNotes(current, [{ project: "api-ai", pinned: 1 }]);
 		assert.notEqual(state.pins, current.pins);
 		assert.deepEqual(current.pins, {});
+	});
+});
+
+describe("needsLegacyImport", () => {
+	it("is due for a state that has never done it", () => {
+		assert.equal(needsLegacyImport(emptyMachineState()), true);
+		assert.equal(needsLegacyImport(sanitizeMachineState({ version: STATE_VERSION })), true);
+	});
+
+	it("is not due once done", () => {
+		const done = sanitizeMachineState({ legacySummariesImported: true });
+		assert.equal(needsLegacyImport(done), false);
+	});
+
+	it("treats anything other than true as not done", () => {
+		for (const value of ["true", 1, 1, null, undefined]) {
+			assert.equal(needsLegacyImport(sanitizeMachineState({ legacySummariesImported: value })), true);
+		}
+	});
+
+	it("is independent of the seed's version guard", () => {
+		// A state already at the current version can still owe an import, and bumping STATE_VERSION
+		// to force one would re-run the seed as well, which is not what either guard is for.
+		const seeded = sanitizeMachineState({ version: STATE_VERSION, legacySummariesImported: true });
+		assert.equal(needsLegacySeed(seeded), false);
+		assert.equal(needsLegacyImport(seeded), false);
 	});
 });

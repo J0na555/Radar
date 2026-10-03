@@ -85,6 +85,23 @@ forms override it. Add `tracked: <project name>` to any note to say exactly
 what it belongs to, which is worth doing once per project rather than trusting
 filenames forever.
 
+### Upgrading from the per-project notes
+
+v0.1 wrote one note per project plus a `<name>-ai.md` summary note for each project
+you generated a summary for. This version owns one dashboard note instead, and on
+your first scan it copies the AI summary text out of those `-ai` notes and into the
+summaries section.
+
+**Nothing is deleted.** The old notes stay exactly where they are, unreferenced by the
+plugin, and a notice tells you which folders they are in once you are happy with the
+dashboard. The frontmatter on those notes (pins, dirty counts, summary freshness) was
+already moved into `data.json` when you upgraded, so it is safe to delete them. Copy
+anything you wrote in them somewhere else first: the body of a project note is yours and
+the plugin never copied it anywhere.
+
+The copy runs once. If you delete the dashboard without keeping the old notes, those
+summaries are gone, which is the only way to lose them.
+
 Pin ranks, the previous scan's dirty counts and AI summary freshness are kept in
 the plugin's own `data.json` rather than in your notes, so editing `pinned` or
 `dirty` in a note has no effect on the panel. Nothing in your notes is read back

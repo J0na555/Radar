@@ -43,7 +43,7 @@ const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 /** Machine state for a plugin that has stored nothing yet. */
 export function emptyMachineState(): MachineState {
-	return { version: 0, pins: {}, previousDirty: {}, summaries: {} };
+	return { version: 0, pins: {}, previousDirty: {}, summaries: {}, legacySummariesImported: false };
 }
 
 /**
@@ -61,6 +61,9 @@ export function sanitizeMachineState(loaded: unknown): MachineState {
 		pins: numberRecord(source.pins, isPinRank),
 		previousDirty: numberRecord(source.previousDirty, isDirtyCount),
 		summaries: summaryRecords(source.summaries),
+		// Absent means not yet done. Defaulting to true would skip the import for every install
+		// that upgraded through a version whose data.json predates this key.
+		legacySummariesImported: source.legacySummariesImported === true,
 	};
 }
 
@@ -74,6 +77,18 @@ export function sanitizeMachineState(loaded: unknown): MachineState {
  */
 export function needsLegacySeed(state: MachineState): boolean {
 	return state.version < STATE_VERSION;
+}
+
+/**
+ * True when the v0.1 summary notes still need copying into the dashboard.
+ *
+ * Not the same guard as the seed, and deliberately so. The seed only fills gaps, so running it
+ * twice costs nothing. Importing is not repeatable: it overwrites whatever is in the summaries
+ * section, so running it after the user regenerated a summary would replace their newer text
+ * with a model reply from months ago. Hence its own flag.
+ */
+export function needsLegacyImport(state: MachineState): boolean {
+	return !state.legacySummariesImported;
 }
 
 /** A project's pin rank. 0 means unpinned, which is also what an absent name means. */
@@ -179,7 +194,7 @@ export function applyLegacyNotes(state: MachineState, notes: readonly LegacyNote
 		}
 	}
 
-	return { version: state.version, pins, previousDirty, summaries };
+	return { version: state.version, pins, previousDirty, summaries, legacySummariesImported: state.legacySummariesImported };
 }
 
 /**

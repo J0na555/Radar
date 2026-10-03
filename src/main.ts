@@ -15,6 +15,7 @@ import type { SummaryEntry } from "./dashboard";
 import { scanProjects } from "./git";
 import { openRepoFolder } from "./editor";
 import { healthSignals } from "./health";
+import { findLegacySummaryNotes, isLegacySummaryPath, legacyFolders, recordFromLegacyHeader } from "./legacy-notes";
 import { ErrorLog } from "./log-writer";
 import { folderChoices } from "./folder-picker";
 import {
@@ -30,6 +31,7 @@ import {
 import {
 	applyLegacyNotes,
 	emptyMachineState,
+	needsLegacyImport,
 	needsLegacySeed,
 	pinRankFor,
 	previousDirtyFor,
@@ -334,6 +336,86 @@ export default class ProjectTrackerPlugin extends Plugin {
 		});
 	}
 
+	/**
+	 * Copy the v0.1 summary notes into the dashboard, once, and say where the old ones are.
+	 *
+	 * The old notes are not deleted, renamed or emptied. That is the whole safety argument for
+	 * doing this at all: a migration that moves files is a migration that can lose files, and these
+	 * are somebody's notes. The copy is the useful part and the originals cost nothing to keep, so
+	 * nothing is destroyed and the user is told what is now redundant.
+	 *
+	 * Guarded separately from the state seed because it is not repeatable the same way. The seed
+	 * only fills gaps, so running it twice costs nothing. This overwrites whatever is in the
+	 * summaries section, so running it again after the user regenerated one summary would replace
+	 * their newer text with a model reply from months ago. Hence `needsLegacyImport`.
+	 *
+	 * The flag is saved after the work rather than before it, which means a crash part-way through
+	 * re-runs the import on the next load. That is the trade: re-reading files that are still on
+	 * disk, against a silent partial import the user has no way to ask for again.
+	 */
+	private async importLegacySummaries(): Promise<void> {
+		if (!needsLegacyImport(this.settings.state)) return;
+
+		const files = this.app.vault.getMarkdownFiles().filter((file) => isLegacySummaryPath(file.path));
+		if (files.length === 0) {
+			this.settings.state.legacySummariesImported = true;
+			await this.saveSettings();
+			return;
+		}
+
+		// Read them all up front, concurrently, rather than through a callback the pure finder
+		// would have to await. A file that will not open is left out of the map, which the finder
+		// treats exactly like one it was told not to touch.
+		const contents = new Map<string, string>();
+		await Promise.all(
+			files.map(async (file) => {
+				try {
+					contents.set(file.path, await this.app.vault.read(file));
+				} catch {
+					// Left absent on purpose. Reading it as empty would migrate an empty summary.
+				}
+			}),
+		);
+
+		const legacy = findLegacySummaryNotes(
+			files.map((file) => file.path),
+			(path) => contents.get(path) ?? null,
+		);
+
+		let imported = 0;
+		for (const note of legacy) {
+			const entry: SummaryEntry = {
+				projectName: note.projectName,
+				provider: note.header.provider ?? "an unknown CLI",
+				record: recordFromLegacyHeader(note.header),
+				body: note.body,
+			};
+			// One call per project rather than one batched write: each is a read-modify-write of the
+			// only copy of every summary, and a failure has to be attributable to one project rather
+			// than taking the other 44 with it.
+			if (await this.upsertSummary(dashboardPath(this.settings), entry)) imported++;
+		}
+
+		this.settings.state.legacySummariesImported = true;
+		await this.saveSettings();
+
+		if (imported > 0) {
+			new Notice(
+				`Project Tracker: moved ${imported} AI summar${imported === 1 ? "y" : "ies"} into ${dashboardPath(this.settings)}. The old notes are untouched, so delete them when the dashboard looks right.`,
+				0,
+			);
+		}
+		if (files.length > imported) {
+			const where = legacyFolders(files.map((file) => file.path))
+				.map((entry) => `${entry.folder} (${entry.count})`)
+				.join(", ");
+			new Notice(
+				`Project Tracker: ${files.length - imported} of ${files.length} old summary notes were left alone. Nothing was deleted, but they are not in the dashboard either. Most are in ${where}.`,
+				0,
+			);
+		}
+	}
+
 	/** True when there is no usable cache, so a probe pass is due. */
 	private detectionIsStale(): boolean {
 		if (this.settings.provider !== null) return false;
@@ -528,6 +610,10 @@ export default class ProjectTrackerPlugin extends Plugin {
 		// than awaited inline, because a generation may already be splicing a summary into this
 		// file and the two must not read it at the same time.
 		await this.dashboardWrites.run(() => syncDashboard(this.app, this.settings, this.projects, now));
+
+		// After the dashboard exists, because that is where the text lands. Before the settings
+		// save below, so a failed scan leaves the import still owed rather than skipped.
+		await this.importLegacySummaries();
 
 		// Read back what summaries already exist. A project with no summary is
 		// the normal case, so nothing is created here: this only looks.

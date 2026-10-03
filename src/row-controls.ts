@@ -1,14 +1,15 @@
 /**
- * The widgets one project row is made of.
+ * One project row, and the widgets it is made of.
  *
  * Out of `view.ts` because the row grew past the point where the state and the
- * markup were in the same function: the view decides what happens, this builds
- * the elements and hands back the click handlers as callbacks.
+ * markup were in the same function: the view decides what happens, this builds the
+ * elements and hands back the click handlers as callbacks. `createProjectRow` at
+ * the top is the whole row, so the view no longer knows what a row is made of, only
+ * which project it is for and whether it is pinned, selected, or a loose match.
  *
- * The labelling contract is the same everywhere in here, and it is the same one
- * the summary control already used: a control that acts gets its full wording on
- * both `aria-label` and `title`, so the explanation is reachable by keyboard and
- * readable on hover.
+ * The labelling contract is the same everywhere in here: a control that acts gets
+ * its full wording on both `aria-label` and `title`, so the explanation is
+ * reachable by keyboard and readable on hover.
  *
  * Plain `createElement` and `textContent` throughout rather than Obsidian's
  * `createSpan`/`setText` prototype helpers. The helpers are nicer, but they only
@@ -16,8 +17,111 @@
  * leaves an empty panel with a stack trace nobody sees.
  */
 import { setIcon } from "obsidian";
+import { relativeAge } from "./format";
 import { describeScore } from "./rank";
-import type { HealthSignal, Project, ScoreResult } from "./types";
+import type { HealthSignal, Project, ProjectStatus, ScoreResult } from "./types";
+
+/** What one row needs to draw itself, and what its controls should do. */
+export interface ProjectRowOptions {
+	project: Project;
+	/** Drawn in the pinned group, which also decides whether the pin slot has a rank. */
+	pinned: boolean;
+	/** Highlighted because the keyboard selection is on it. */
+	selected: boolean;
+	/** The query matched only by scattering characters, so dim rather than hide it. */
+	weak: boolean;
+	/** Draw the "why this score" line under the name. */
+	explainScores: boolean;
+	/** Wording for the editor control, which depends on the configured command. */
+	editorLabel: string;
+	/** One clock for every row, so ages on the same panel agree. */
+	now: number;
+	/** A summary is running for this project, so its control is disabled. */
+	summarizing: boolean;
+	onOpenNote: (project: Project) => void;
+	onRunSummary: (project: Project) => void;
+	onOpenEditor: (project: Project) => void;
+	/** Right-click, which is where every other action lives. */
+	onContextMenu: (event: MouseEvent, project: Project) => void;
+}
+
+/**
+ * One project row, whole.
+ *
+ * The row used to be assembled inside the view's render method, which meant the
+ * view owned the markup, the facts it chose to show, and the state it decided
+ * them from. All three live here now, with the controls below it. The view passes
+ * what it knows and gets an element back.
+ *
+ * Element order on the right is fixed for every row: pin slot, editor, summary,
+ * score. The pin slot is drawn even when the project is unpinned, so the score
+ * never moves sideways when something gets pinned.
+ */
+export function createProjectRow(doc: Document, options: ProjectRowOptions): HTMLElement {
+	const { project, pinned, selected, weak, explainScores, now, summarizing } = options;
+
+	const classes = ["pt-row"];
+	if (pinned) classes.push("is-pinned");
+	if (selected) classes.push("is-selected");
+	if (weak) classes.push("is-weak");
+	if (project.score.status !== "active") classes.push(`is-${project.score.status satisfies ProjectStatus}`);
+
+	const row = doc.createElement("div");
+	row.className = classes.join(" ");
+
+	const main = doc.createElement("div");
+	main.className = "pt-main";
+	row.appendChild(main);
+
+	const name = doc.createElement("div");
+	name.className = "pt-name";
+	name.textContent = project.facts.name;
+	name.addEventListener("click", () => options.onOpenNote(project));
+	main.appendChild(name);
+
+	const meta = doc.createElement("div");
+	meta.className = "pt-meta";
+	main.appendChild(meta);
+	if (project.facts.branch) {
+		const branch = doc.createElement("span");
+		branch.className = "pt-branch";
+		branch.textContent = project.facts.branch;
+		meta.appendChild(branch);
+	}
+	if (project.facts.dirtyCount > 0) {
+		const dirty = doc.createElement("span");
+		dirty.className = "pt-dirty";
+		dirty.textContent = `${project.facts.dirtyCount} dirty`;
+		meta.appendChild(dirty);
+	}
+	const age = doc.createElement("span");
+	age.className = "pt-age";
+	age.textContent = relativeAge(project.facts.lastCommit, now);
+	meta.appendChild(age);
+
+	// After the facts, so the eye reads what the repo is before what is wrong with
+	// it. Empty for a healthy repo, which is every row most of the time.
+	appendHealthBadges(meta, project.health);
+
+	// Off unless asked for, and once per row rather than per score: the tooltip is
+	// always there, this is for reading without hovering anything.
+	if (explainScores) main.appendChild(createWhyLine(doc, project.score));
+
+	const right = doc.createElement("div");
+	right.className = "pt-right";
+	row.appendChild(right);
+	right.appendChild(createPinSlot(doc, pinned ? project.pin : null));
+	right.appendChild(createOpenControl(doc, options.editorLabel, () => options.onOpenEditor(project)));
+	right.appendChild(createSummaryControl(doc, project, summarizing, () => options.onRunSummary(project)));
+	right.appendChild(createScoreSlot(doc, project.score));
+
+	row.addEventListener("contextmenu", (event) => {
+		event.preventDefault();
+		options.onContextMenu(event, project);
+	});
+	return row;
+}
+
 
 /**
  * The AI summary control for one row.

@@ -41,7 +41,7 @@ import {
 	RepoFacts,
 	SummaryState,
 } from "./types";
-import { readPins, readPreviousDirty, readSummaryStates, syncAllNotes, writeSummaryNote } from "./vault";
+import { readPins, readPreviousDirty, readSummaryStates, syncAllNotes, syncProjectNote, writeSummaryNote } from "./vault";
 import { renderWeightSettings } from "./weight-settings";
 import {
 	ICON_PROJECT_TRACKER,
@@ -309,6 +309,23 @@ export default class ProjectTrackerPlugin extends Plugin {
 
 	getProjects(): Project[] {
 		return this.projects;
+	}
+
+	/**
+	 * Write one project's pin to its note, without rescanning anything.
+	 *
+	 * Pinning used to call `refresh`, which forked a `git` process for every
+	 * repository under the scan root and rewrote every note to store one integer, on
+	 * a panel the user had just asked to make easier to use. The pin is one field of
+	 * one note, so it is written on its own and the panel re-ranks in memory.
+	 *
+	 * Returns whether the write landed. The view draws the new pin before calling
+	 * this and puts it back if it comes back false, so a pin that silently did not
+	 * save cannot be left on screen.
+	 */
+	async savePin(project: Project): Promise<boolean> {
+		const path = await syncProjectNote(this.app, this.settings, project.facts, project.score, project.pin);
+		return path !== null;
 	}
 
 	/**

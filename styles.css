@@ -2,6 +2,7 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
+	flex-wrap: wrap;
 	gap: 8px;
 	padding-bottom: 4px;
 }
@@ -14,6 +15,53 @@
 .pt-controls {
 	display: flex;
 	gap: 4px;
+}
+
+/*
+ * The filter box.
+ *
+ * Its own line under the header rather than inside it, because the header is
+ * `space-between` and a growing input in that row pushes the buttons around on
+ * every keystroke. `flex: 1` inside the wrapped header means it takes the full
+ * width on its own line and the controls stay put above it.
+ */
+.pt-search {
+	flex: 1 1 100%;
+	min-width: 0;
+	font-size: var(--font-ui-smaller, 0.9em);
+}
+
+.pt-status {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+	font-size: var(--font-ui-smaller, 0.8em);
+	color: var(--text-muted);
+	margin: 2px 0 4px;
+}
+
+.pt-status-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* The shortcuts, once, in the least prominent style available. */
+.pt-keys {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-size: 0.95em;
+	white-space: nowrap;
+}
+
+@media (max-width: 400px) {
+	/* Narrow sidebar: the keys go, the counts stay. A filtered panel with no
+	   explanation of what was filtered is the failure this whole feature is about. */
+	.pt-keys {
+		display: none;
+	}
 }
 
 .pt-btn {
@@ -55,6 +103,32 @@
 
 .pt-row:hover {
 	background-color: var(--background-modifier-hover);
+}
+
+/*
+ * The keyboard selection.
+ *
+ * A background plus a ring rather than a colour change, because the pinned accent
+ * already lives on the left border of a row and selection must not be mistaken for
+ * pinning. Both together, so it reads on a theme where either alone is too faint.
+ */
+.pt-row.is-selected {
+	background-color: var(--background-modifier-active-hover, var(--background-modifier-hover));
+	box-shadow: inset 0 0 0 1px var(--interactive-accent);
+}
+
+/*
+ * A search that only matched by scattering characters across the name.
+ *
+ * Dimmed, not hidden. The status line says how many are like this, so a dimmed row
+ * is explained rather than mysterious.
+ */
+.pt-row.is-weak {
+	opacity: 0.65;
+}
+
+.pt-row.is-selected.is-weak {
+	opacity: 0.85;
 }
 
 .pt-row.is-pinned {

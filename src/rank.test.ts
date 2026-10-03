@@ -8,6 +8,7 @@ import {
 	recencyPoints,
 	sanitizeWeights,
 	scoreRepo,
+	topPinRank,
 	WEIGHT_BOUNDS,
 	WEIGHT_KEYS,
 	WEIGHT_LABELS,
@@ -187,6 +188,15 @@ describe("rankProjects", () => {
 		);
 	});
 
+	it("returns a new array, so sorting here cannot reorder the caller's", () => {
+		const a = { facts: facts({ name: "aaa" }), score: scoreOf(), pin: 0 };
+		const b = { facts: facts({ name: "zzz" }), score: scoreOf(), pin: 0 };
+		const projects = [b, a];
+		const ranked = rankProjects(projects);
+		assert.deepEqual(projects.map((p) => p.facts.name), ["zzz", "aaa"]);
+		assert.deepEqual(ranked.map((p) => p.facts.name), ["aaa", "zzz"]);
+	});
+
 	it("puts pins above every derived score, in pin order", () => {
 		const projects = [
 			{ facts: facts({ name: "hot" }), score: scoreOf({ dirtyCount: 144 }), pin: 0 },
@@ -197,6 +207,41 @@ describe("rankProjects", () => {
 			rankProjects(projects).map((p) => p.facts.name),
 			["first", "second", "hot"],
 		);
+	});
+});
+
+describe("topPinRank", () => {
+	const pinned = (...ranks: number[]) => ranks.map((pin) => ({ pin }));
+	const unpinned = { pin: 0 };
+
+	it("is 1 when nothing is pinned", () => {
+		assert.equal(topPinRank([]), 1);
+		assert.equal(topPinRank([unpinned, unpinned]), 1);
+	});
+
+	it("is one below the lowest rank in use, so a second pin goes first", () => {
+		assert.equal(topPinRank(pinned(4, 9)), 3);
+		assert.equal(topPinRank(pinned(2)), 1);
+	});
+
+	it("never returns 0, because 0 means unpinned", () => {
+		// A rank of 0 would read as "no pin" in the frontmatter and in every
+		// comparison that looks at it, so the project the user just pinned would drop
+		// out of the pinned group while its button still said pinned.
+		for (const ranks of [[1], [1, 2], [1, 2, 3], [5]]) {
+			assert.ok(topPinRank(pinned(...ranks)) > 0, `rank for ${ranks.join(",")} must stay positive`);
+		}
+	});
+
+	it("ties the top rank when nothing can go below it", () => {
+		// There is no rank above 1, so the new pin shares it and `rankProjects`
+		// decides the order. Move up in the pin menu is how the user takes it.
+		assert.equal(topPinRank(pinned(1)), 1);
+		assert.equal(topPinRank(pinned(1, 2)), 1);
+	});
+
+	it("ignores unpinned projects, whose 0 is not a rank", () => {
+		assert.equal(topPinRank([unpinned, { pin: 3 }, unpinned]), 2);
 	});
 });
 

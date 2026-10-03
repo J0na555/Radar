@@ -229,6 +229,34 @@ export function describeScore(score: ScoreResult): string {
 }
 
 /**
+ * The rank a new pin needs to land at the top of the pinned group.
+ *
+ * One below the lowest rank in use, so pinning twice puts the second project
+ * ahead of the first. With nothing pinned there is nothing to be below, so 1.
+ *
+ * Floored at 1, and the floor is not cosmetic. Ranks are positive integers and 0
+ * means unpinned, in the note frontmatter and in every comparison that reads it, so
+ * a rank of 0 would not be "above everything" — it would be "not pinned at all",
+ * and the project the user had just pinned would vanish from the pinned group
+ * while its button still read pinned. When the top rank is already 1 the new pin
+ * ties it, and `rankProjects` breaks that tie on score, so it lands beside the
+ * first pin rather than strictly above it. Move up in the pin menu settles it.
+ *
+ * Read from every project rather than from the ranked list, because the caller has
+ * an in-memory list at this point and not a scan: `p` on the keyboard must not
+ * cause a rescan to work out an integer.
+ */
+export function topPinRank(projects: readonly { pin: number }[]): number {
+	let lowest = Number.POSITIVE_INFINITY;
+	for (const project of projects) {
+		if (project.pin > 0 && project.pin < lowest) lowest = project.pin;
+	}
+	// The same positive-rank rule everywhere else in the file, so a rank that cannot
+	// be ordered is never produced.
+	return Number.isFinite(lowest) ? Math.max(1, lowest - 1) : 1;
+}
+
+/**
  * Order projects: pinned first in the user's order, then by score, then by name.
  *
  * Two layers, never blended. A pin of 0 means unpinned and sorts below every

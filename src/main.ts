@@ -125,7 +125,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 	/**
 	 * Pin writes in flight, ordered per project, and the wait that drains them.
 	 *
-	 * Here rather than in the view because `refresh` below reads pins back out of the notes
+	 * Here rather than in the view because `refresh` below reads pins back out of the state
 	 * and has two doors into it: the panel's Refresh button and the command palette's
 	 * "Rescan projects". A guard on one caller is not the invariant.
 	 */
@@ -685,9 +685,9 @@ export default class ProjectTrackerPlugin extends Plugin {
 	 * scan, or on view open, because a summary is a snapshot of a model call and those are
 	 * expensive and easy to make stale by accident.
 	 *
-	 * Writes exactly one file, the `<name>-ai.md` sibling, and only after the model's reply
-	 * has parsed into the expected shape. Every failure path, from no working CLI to a
-	 * missing binary to a hung CLI to a reply in the wrong shape, reports through a
+	 * Writes one project's block into the dashboard's summaries section, and only after the
+	 * model's reply has parsed into the expected shape. Every failure path, from no working
+	 * CLI to a missing binary to a hung CLI to a reply in the wrong shape, reports through a
 	 * Notice, records to `errors.log`, and writes nothing.
 	 */
 	async generateSummary(project: Project): Promise<SummaryState | null> {

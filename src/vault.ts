@@ -1,7 +1,9 @@
 import { App, TFile, TFolder, normalizePath } from "obsidian";
 import { applyFrontmatterPatch, desiredFrontmatter, diffManaged } from "./frontmatter";
 import { spawnSync } from "child_process";
-import { aiNotePath, sanitizeBase, stateFromFrontmatter, SummaryFrontmatter } from "./summary";
+import { stateFromRecord } from "./machine-state";
+import type { LegacyNoteState, LegacySummaryFrontmatter } from "./machine-state";
+import { aiNotePath, sanitizeBase } from "./summary";
 import { PluginSettings, Project, ProjectFrontmatter, RepoFacts, ScoreResult, SummaryState } from "./types";
 
 /** Map a project name to a safe note filename. */
@@ -31,53 +33,38 @@ export async function ensureFolder(app: App, folder: string): Promise<void> {
 }
 
 /**
- * Every existing project note's managed frontmatter, keyed by project name. One walk of the
- * notes folder, shared by the readers below. A project with no note is simply absent, which is
- * the normal case for anything the user never touched.
+ * Every legacy note's managed frontmatter, for the one-time state seed.
+ *
+ * Only ever called by the upgrade path, and only once. After the seed, this plugin never
+ * reads `pinned` or `dirty` out of a note again: a note is a document the user owns, and
+ * state that has to be right cannot live in one. See `applyLegacyNotes`.
  */
-function readNoteFrontmatter(app: App, settings: PluginSettings): Map<string, ProjectFrontmatter> {
-	const notes = new Map<string, ProjectFrontmatter>();
+export function readLegacyNotes(app: App, settings: PluginSettings): LegacyNoteState[] {
+	const notes: LegacyNoteState[] = [];
 	const folder = app.vault.getAbstractFileByPath(normalizePath(settings.notesFolder));
 	if (!(folder instanceof TFolder)) return notes;
 
 	for (const child of folder.children) {
 		if (!(child instanceof TFile) || child.extension !== "md") continue;
-		const fm = app.metadataCache.getFileCache(child)?.frontmatter as ProjectFrontmatter | undefined;
-		if (!fm) continue;
-		notes.set(typeof fm.project === "string" ? fm.project : child.basename, fm);
+		// Read as both shapes at once because a note in this folder is one of two things: a
+		// generated project note, or a generated summary note. Both were written by this plugin,
+		// so either key set appearing without the other is a hand edit rather than a normal case.
+		const fm = app.metadataCache.getFileCache(child)?.frontmatter as
+			| (ProjectFrontmatter & LegacySummaryFrontmatter)
+			| undefined;
+		// The filename is the fallback rather than the primary key: a note whose `project` was
+		// hand-edited away is still that project's note, and dropping it would lose a pin.
+		const project = typeof fm?.project === "string" && fm.project !== "" ? fm.project : child.basename;
+		notes.push({
+			project,
+			pinned: fm?.pinned,
+			dirty: fm?.dirty,
+			// Null unless the note says it is ours. A `commit` key in a hand-written note is
+			// not a summary, and `stampFromLegacySummary` is what refuses it.
+			summary: fm && fm.ai_generated === true ? fm : null,
+		});
 	}
 	return notes;
-}
-
-/**
- * Read the user's pin rank from every existing project note. A project with no note, or a note
- * with no numeric `pinned`, is absent from the map and treated as unpinned.
- */
-export async function readPins(app: App, settings: PluginSettings): Promise<Map<string, number>> {
-	const pins = new Map<string, number>();
-	for (const [name, fm] of readNoteFrontmatter(app, settings)) {
-		const pinned = Number(fm.pinned);
-		if (Number.isFinite(pinned) && pinned > 0) pins.set(name, pinned);
-	}
-	return pins;
-}
-
-/**
- * Read the dirty file count each project had at the previous scan. `dirty` is written on every
- * scan, so this is the memory the "sustained dirty" warning reads instead of a history file of
- * its own. Absent means "no history", which the warning treats as nothing to say.
- *
- * Must be read before `syncAllNotes` runs in the same scan, or it reads the value this scan
- * just wrote and every repo looks like it has been dirty for a while. `main.refresh` orders
- * the two for exactly that reason.
- */
-export async function readPreviousDirty(app: App, settings: PluginSettings): Promise<Map<string, number>> {
-	const counts = new Map<string, number>();
-	for (const [name, fm] of readNoteFrontmatter(app, settings)) {
-		const dirty = Number(fm.dirty);
-		if (Number.isFinite(dirty)) counts.set(name, dirty);
-	}
-	return counts;
 }
 
 /**
@@ -138,42 +125,6 @@ export async function syncProjectNote(
 }
 
 /**
- * Write one project's pin into its note, and nothing else.
- *
- * Exists because `syncProjectNote` recomputes every managed key, and one of them cannot be
- * recomputed the same way twice: `last_commit_rel` is an age measured against `Date.now()`,
- * so a pin written five minutes after the scan computes a different string than the scan
- * did and rewrites the key. Pinning one project used to quietly restate how old its last
- * commit was.
- *
- * So the pin write patches `pinned` alone. Everything else is left for the next scan, which
- * is the thing that owns it. A project with no note yet still gets a whole one written,
- * because there is nothing to patch and a created note has to be complete.
- */
-export async function writePin(app: App, settings: PluginSettings, project: Project): Promise<string | null> {
-	await ensureFolder(app, settings.notesFolder);
-	const target = notePath(settings, project.facts.name);
-	const existing = app.vault.getAbstractFileByPath(target);
-
-	// No note yet: create it whole, so every key the plugin manages exists from the start.
-	if (!(existing instanceof TFile)) {
-		return syncProjectNote(app, settings, project.facts, project.score, project.pin);
-	}
-
-	try {
-		await app.fileManager.processFrontMatter(existing, (fm) => {
-			// Written rather than routed through `diffManaged`, whose whole job is comparing a freshly
-			// computed set of keys against the note. Here there is one key and one value, and the
-			// value is not computed at all.
-			(fm as Record<string, unknown>).pinned = project.pin > 0 ? project.pin : 0;
-		});
-	} catch {
-		return null;
-	}
-	return target;
-}
-
-/**
  * Write a batch of notes sequentially. Sequential rather than parallel on purpose:
  * `processFrontMatter` reads and rewrites the same files Obsidian is tracking, and interleaved
  * writes against one vault produce flaky results.
@@ -217,8 +168,13 @@ export async function writeSummaryNote(
 	return target;
 }
 
-/** Short HEAD sha for a repo, used to judge whether a summary has gone stale. */
-function headSha(repoPath: string): string | null {
+/**
+ * Short HEAD sha for a repo, used to judge whether a summary has gone stale.
+ *
+ * Exported because staleness is now a comparison between data.json and the repo, and this is
+ * the other half of it. One `rev-parse` per project, exactly as before.
+ */
+export function headSha(repoPath: string): string | null {
 	const res = spawnSync("git", ["rev-parse", "--short", "HEAD"], {
 		cwd: repoPath,
 		encoding: "utf8",
@@ -229,25 +185,29 @@ function headSha(repoPath: string): string | null {
 }
 
 /**
- * Read every existing summary note's state back out of frontmatter. Reads only, and only for
- * notes that already exist. The 45 notes this plugin could generate do not get generated here:
- * a project with no summary is absent from the map, and the panel shows that as "none".
+ * Rebuild every project's summary state from machine state, comparing each against the repo
+ * as it is now.
+ *
+ * Reads data.json, not notes. Freshness used to be the summary note's frontmatter, which put
+ * the answer to "is this out of date" in a file whose whole purpose was to hold the thing
+ * being judged. A project with no record is absent from the map, and the panel shows that as
+ * "none", which is the normal case: summaries are made on request.
+ *
+ * `head` is injected rather than called here so this stays a lookup and a comparison. The git
+ * call behind it is one `rev-parse` per project, the same one the old reader made.
  */
-export async function readSummaryStates(
-	app: App,
+export function readSummaryStates(
 	settings: PluginSettings,
 	projects: Project[],
-): Promise<Map<string, SummaryState>> {
+	head: (facts: RepoFacts) => string | null,
+): Map<string, SummaryState> {
 	const states = new Map<string, SummaryState>();
+	const records = settings.state.summaries;
 
 	for (const project of projects) {
-		const path = aiNotePath(settings, project.facts.name);
-		const file = app.vault.getAbstractFileByPath(path);
-		if (!(file instanceof TFile)) continue;
-
-		const fm = app.metadataCache.getFileCache(file)?.frontmatter as SummaryFrontmatter | undefined;
-		const state = stateFromFrontmatter(fm, path, project.facts, headSha(project.facts.path));
-		if (state) states.set(project.facts.name, state);
+		const record = records[project.facts.name];
+		if (!record) continue;
+		states.set(project.facts.name, stateFromRecord(record, project.facts, head(project.facts)));
 	}
 
 	return states;

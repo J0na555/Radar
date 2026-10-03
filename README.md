@@ -71,8 +71,10 @@ and still sorts as plain text; `last_commit_rel` is a convenience for reading th
 note at a glance and goes stale between rescans.
 
 The body of the note is yours. The plugin never reads, rewrites, or deletes it.
-Pin a project by editing `pinned` in the note's frontmatter, or by
-right-clicking it in the sidebar.
+Pin a project by right-clicking it in the sidebar. Pin ranks, the previous
+scan's dirty counts and AI summary freshness are kept in the plugin's own
+`data.json` rather than in your notes, so editing `pinned` or `dirty` in a
+note has no effect on the panel.
 
 Keeping the folder under `private/` means your Quartz config's
 `ignorePatterns` leaves these notes out of published builds.

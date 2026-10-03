@@ -22,7 +22,6 @@ function writes(items: PinMenuPlanItem[], action: PinMenuPlanItem["action"]): nu
 
 /** A summary that exists, so `project.summary` is truthy. The plan only checks that. */
 const HAS_SUMMARY: SummaryState = {
-	path: "Projects/api-ai.md",
 	generatedAt: "2026-10-01T10:00:00Z",
 	commit: "abc1234",
 	dirty: false,

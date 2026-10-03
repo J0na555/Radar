@@ -124,20 +124,46 @@ export interface Project {
 	 * is the normal case: only a firing signal earns any space on the row.
 	 */
 	health: HealthSignal[];
-	/** Absolute vault path of the per-project note, once synced. */
+	/**
+	 * Vault path of this project's note, when it has one. The plugin does not create
+	 * it: a note belongs to a project because the user set `tracked: true` on it, or
+	 * because a note in the vault is named after the project.
+	 */
 	notePath?: string;
 	/**
 	 * What is known about the AI summary, refilled on every scan. Absent means no
-	 * summary note exists, which is normal: notes are created on request only.
+	 * summary has been generated, which is the normal case.
 	 */
 	summary?: SummaryState;
 }
 
-/** Freshness of a project's AI summary, as read back from the summary note. */
+/**
+ * What an AI summary was written from, as persisted in data.json.
+ *
+ * Only the facts about the generation. `SummaryState`'s `stale` and `staleReason` are
+ * recomputed on every scan and deliberately not stored: a persisted verdict would be a
+ * second copy of a question that changes every time the repo moves, and one of the two
+ * copies would always be the stale one.
+ */
+export interface SummaryRecord {
+	/** ISO 8601 generation time, or null when the stored value was not a date. */
+	generatedAt: string | null;
+	/** Short commit the summary was written from, or null for a repo with no commits. */
+	commit: string | null;
+	/** Uncommitted file count at generation time. */
+	dirtyCount: number;
+}
+
+/**
+ * Freshness of a project's AI summary, as the panel renders it.
+ *
+ * Reconstructed from a `SummaryRecord` on every scan rather than stored, because "stale"
+ * is a comparison against the repo as it is now and storing the answer would freeze it.
+ * There is deliberately no path: the text lives in the dashboard note and the freshness
+ * here, and a field that claimed to name a file would be naming one that does not exist.
+ */
 export interface SummaryState {
-	/** Vault path of the sibling `<name>-ai.md` note. */
-	path: string;
-	/** Generation time recorded in the note, ISO 8601. */
+	/** Generation time recorded when the summary was written, ISO 8601. */
 	generatedAt: string | null;
 	/** Short commit the summary was written from. */
 	commit: string | null;
@@ -190,6 +216,38 @@ export type FrontmatterPatch = {
 /** Which local CLI produces the summary. */
 export type ProviderId = "gemini" | "codex" | "opencode";
 
+/**
+ * The machine state the plugin owns, as persisted in data.json.
+ *
+ * Pin ranks, the previous scan's dirty counts and summary freshness were all in note
+ * frontmatter once. They moved here for one reason: all three are written on every scan
+ * and none is ever hand-edited, which makes them plugin state rather than note content.
+ * The second reason is durability — a user who deletes or rewrites the notes file used to
+ * lose their pin order along with it, which is not something a ranking plugin should be
+ * able to do.
+ *
+ * `version` is the seed guard. An install upgrading from the note-based layout has real
+ * pins and real dirty counts in notes that exist nowhere else, and there is exactly one
+ * moment they are readable.
+ */
+export interface MachineState {
+	/** Layout version of what is stored here. See `STATE_VERSION`. */
+	version: number;
+	/**
+	 * Pin rank per project name. A name absent here is unpinned, and so is every rank
+	 * the sanitizer rejects, so a corrupt data.json costs a pin rather than the panel.
+	 */
+	pins: Record<string, number>;
+	/**
+	 * Uncommitted file count per project at the previous scan. Absent means this scan is
+	 * the first to see the project, which the sustained-dirty warning reads as "no
+	 * history" rather than as zero.
+	 */
+	previousDirty: Record<string, number>;
+	/** What each AI summary was written from, per project name. */
+	summaries: Record<string, SummaryRecord>;
+}
+
 /** How a provider actually behaves, which is three states and not two. */
 export type ProbeState = "works" | "broken" | "absent";
 
@@ -221,7 +279,11 @@ export interface ProviderDetection {
 export interface PluginSettings {
 	/** Absolute path scanned for git repositories. */
 	scanRoot: string;
-	/** Vault-relative folder holding one generated note per project. */
+	/**
+	 * Vault-relative folder the plugin writes its notes into. The user's choice: the
+	 * plugin has no idea whether this vault is published anywhere, and says nothing
+	 * about it. Empty means the vault root.
+	 */
 	notesFolder: string;
 	/** Show projects with no live work and no commit in the last 30 days. */
 	showDormant: boolean;
@@ -253,4 +315,6 @@ export interface PluginSettings {
 	editorCommand: string;
 	/** Cached provider detection, with the time it was taken. */
 	detection: ProviderDetection;
+	/** Pin ranks, dirty history and summary freshness. See `MachineState`. */
+	state: MachineState;
 }

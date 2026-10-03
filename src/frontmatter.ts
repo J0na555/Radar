@@ -79,8 +79,10 @@ export function desiredFrontmatter(
 		// The owner/repo slug, unchanged. Left exactly as parseGithubSlug has always
 		// reported it because something outside this repo may already read it.
 		github: facts.github ?? null,
-		// Always written, including 0. Skipping the key when unpinned would leave a
-		// stale rank on disk forever, because unpinning only changes it to 0.
+		// A mirror, not the pin of record: data.json is, since the state moved there. It stays
+		// written because a note that says which project it is and how it ranks still reads
+		// correctly on its own, and because a downgrade has something to fall back to. Editing
+		// `pinned` in a note has no effect on the panel.
 		pinned: pin > 0 ? pin : 0,
 		last_commit: isoDate(facts.lastCommit) ?? null,
 		last_commit_rel: relativeAge(facts.lastCommit, now),

@@ -78,6 +78,8 @@ export class ProjectTrackerView extends ItemView {
 				write: (pin: number) => Promise<void>,
 			) => Promise<void>;
 			generateSummary: (project: Project) => Promise<SummaryState | null>;
+			/** Where one project's AI summary text is. */
+			summaryTarget: (project: Project) => string;
 			/** Hand a project's folder to the configured editor. */
 			openRepoFolder: (project: Project) => Promise<void>;
 			/** Where a failure is recorded, so a notice can name the file. */
@@ -430,12 +432,24 @@ export class ProjectTrackerView extends ItemView {
 		return this.selectedIndex >= 0 ? (this.visible[this.selectedIndex]?.row.project ?? null) : null;
 	}
 
+	/**
+	 * Where this project's AI summary lives.
+	 *
+	 * Resolved by the plugin rather than carried on the summary state, because freshness and
+	 * location have different lifetimes: the freshness is a fact about a model call that
+	 * survives the user renaming or deleting the note, and a stored path would be a claim about
+	 * a file the plugin does not control.
+	 */
+	private summaryTarget(project: Project): string {
+		return this.plugin.summaryTarget(project);
+	}
+
 	/** Everything the right-click menu can do, apart from the one label it needs. */
 	private pinMenuActions(): Omit<PinMenuActions, "editorLabel"> {
 		return {
 			onPin: (project, pin) => void this.queuePin(project, () => pin),
 			topRank: topPinRank(this.projects),
-			onOpenSummary: (project) => void openSummaryNote(this.app, project),
+			onOpenSummary: (project) => void openSummaryNote(this.app, project, this.summaryTarget(project)),
 			onOpenEditor: (project) => void this.plugin.openRepoFolder(project),
 			onOpenNote: (project) => void openProjectNote(this.app, project),
 		};

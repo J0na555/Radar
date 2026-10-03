@@ -24,6 +24,15 @@ import {
 	sanitizeProbes,
 	selectProvider,
 } from "./provider";
+import {
+	applyLegacyNotes,
+	emptyMachineState,
+	needsLegacySeed,
+	pinRankFor,
+	previousDirtyFor,
+	sanitizeMachineState,
+	STATE_VERSION,
+} from "./machine-state";
 import { PinQueue } from "./pin-queue";
 import { DEFAULT_WEIGHTS, scoreRepo, sanitizeWeights } from "./rank";
 import { StartupLog } from "./startup-log";
@@ -40,9 +49,11 @@ import {
 	ProviderId,
 	ProviderProbe,
 	RepoFacts,
+	SummaryRecord,
 	SummaryState,
 } from "./types";
-import { readPins, readPreviousDirty, readSummaryStates, syncAllNotes, writePin, writeSummaryNote } from "./vault";
+import { headSha, readLegacyNotes, readSummaryStates, syncAllNotes, writeSummaryNote } from "./vault";
+import { WriteChain } from "./write-chain";
 import { renderWeightSettings } from "./weight-settings";
 import {
 	ICON_PROJECT_TRACKER,
@@ -68,6 +79,10 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	// deliberately absent here, for the reason spelled out at EDITOR_COMMAND_EXAMPLES.
 	editorCommand: "",
 	detection: { checkedAt: 0, probes: [], selected: null },
+	// A fresh object per process, and `loadSettings` replaces it with another one. Sharing a
+	// nested default across every settings object is how a mutation of one user's state ends up
+	// as the factory default.
+	state: emptyMachineState(),
 };
 
 const RIBBON_TITLE = "Open Project Tracker";
@@ -102,6 +117,17 @@ export default class ProjectTrackerPlugin extends Plugin {
 	 * "Rescan projects". A guard on one caller is not the invariant.
 	 */
 	private readonly pinWrites = new PinQueue();
+
+	/**
+	 * Settings writes, one at a time.
+	 *
+	 * Separate from `pinWrites` on purpose. That queue orders per project and lets different
+	 * projects write concurrently, which cost nothing while a pin went into its own note. Pins
+	 * are machine state now, so every one of those writes serialises the whole settings file,
+	 * and two overlapping `saveData` calls can interleave so the later one writes a snapshot
+	 * taken before the earlier one finished.
+	 */
+	private readonly settingsWrites = new WriteChain();
 
 	/**
 	 * Register everything the plugin adds to the workspace.
@@ -233,6 +259,17 @@ export default class ProjectTrackerPlugin extends Plugin {
 		return selectProvider(this.settings.provider, this.settings.detection.probes);
 	}
 
+	/**
+	 * Where one project's AI summary text is.
+	 *
+	 * The summary state knows what the summary was generated from and not where the text went,
+	 * which is deliberate: the two have different lifetimes and the plugin is about to move the
+	 * text again. One function here so there is a single answer to it.
+	 */
+	summaryTarget(project: Project): string {
+		return aiNotePath(this.settings, project.facts.name);
+	}
+
 	/** True when there is no usable cache, so a probe pass is due. */
 	private detectionIsStale(): boolean {
 		if (this.settings.provider !== null) return false;
@@ -308,32 +345,43 @@ export default class ProjectTrackerPlugin extends Plugin {
 	}
 
 	/**
-	 * Write one project's pin to its note, without rescanning anything.
+	 * Write one project's pin into machine state, without rescanning anything.
 	 *
 	 * Pinning used to call `refresh`, which forked a `git` process for every repository
 	 * under the scan root and rewrote every note to store one integer, on a panel the user
-	 * had just asked to make easier to use. The pin is one field of one note, so it is
-	 * written on its own and the panel re-ranks in memory.
+	 * had just asked to make easier to use. The pin is one field, so it is written on its own
+	 * and the panel re-ranks in memory.
 	 *
-	 * `writePin` patches `pinned` and nothing else. An earlier version went through
-	 * `syncProjectNote`, which recomputes every managed key, and that quietly rewrote
-	 * `last_commit_rel` too: it is an age measured against `Date.now()`, so the pin write
-	 * computed it against a later clock than the scan had and restated it. The scan owns
-	 * that key.
+	 * A pin rank is not stored as 0 when unpinning, it is removed. 0 already means unpinned in
+	 * every comparison that reads the value, so a stored 0 would be a key that says nothing and
+	 * grows one entry per project the user unpins.
+	 *
+	 * Rolls the stored rank back on a failed write as well as returning false, because
+	 * `applyPin` only knows how to put the in-memory project back. A rank left in data.json with
+	 * no row showing it is a pin the panel has forgotten about, and the next rescan would
+	 * restore it out of nowhere.
 	 *
 	 * Returns whether the write landed. The view draws the new pin before calling this and
 	 * puts it back if it comes back false, so a pin that silently did not save cannot be
 	 * left on screen.
 	 */
 	async savePin(project: Project): Promise<boolean> {
-		const path = await writePin(this.app, this.settings, project);
-		if (path !== null) {
-			if (!project.notePath) {
-				project.notePath = path;
-			}
+		const name = project.facts.name;
+		const had = name in this.settings.state.pins;
+		const before = this.settings.state.pins[name];
+
+		if (project.pin > 0) this.settings.state.pins[name] = project.pin;
+		else delete this.settings.state.pins[name];
+
+		try {
+			await this.saveSettings();
 			return true;
+		} catch (error) {
+			if (had) this.settings.state.pins[name] = before;
+			else delete this.settings.state.pins[name];
+			new Notice(`Project Tracker: could not save the pin for ${name} (${String(error)}).`);
+			return false;
 		}
-		return false;
 	}
 
 	/**
@@ -352,32 +400,54 @@ export default class ProjectTrackerPlugin extends Plugin {
 	}
 
 	/**
+	 * Move the note-derived state into data.json, once, for an install that has notes.
+	 *
+	 * An install upgrading today has real pin ranks and real dirty counts sitting in 45 notes'
+	 * frontmatter, and this is the only moment anything can read them. Skipping it would reset
+	 * every pin in every install, silently, on first load, which is the worst outcome this
+	 * change has available to it. So it runs before anything reads state, and the version that
+	 * stops it running again is written in the same breath: a save that fails leaves the
+	 * version unwritten and the seed runs again next time, which only fills gaps.
+	 */
+	private async seedStateFromLegacyNotes(): Promise<void> {
+		if (!needsLegacySeed(this.settings.state)) return;
+
+		const legacy = readLegacyNotes(this.app, this.settings);
+		this.settings.state = {
+			...applyLegacyNotes(this.settings.state, legacy),
+			version: STATE_VERSION,
+		};
+		await this.saveSettings();
+	}
+
+	/**
 	 * Rescan, score, then write the per-project notes.
 	 *
-	 * Settles the pin queue first, because this is where pins are read back out of the
-	 * notes. A pin write that has not landed yet reads as absent, and this method replaces
-	 * `this.projects` with new objects, so an in-flight write would leave the panel showing
-	 * one rank and the note holding another. Both entry points reach this line, so both are
-	 * covered.
+	 * Settles the pin queue first, because a queued pin write replaces a rank that this method
+	 * is about to read, and it builds new project objects: an in-flight write would leave the
+	 * panel showing one rank and machine state holding another. Both entry points reach this
+	 * line, so both are covered.
 	 *
-	 * Pins and the previous dirty count are then read before scoring, so a manual rank
-	 * survives a rescan and a sustained-dirty warning knows what the last scan saw. Both
-	 * must happen before the notes are written: the dirty count is written by this very
-	 * scan, so reading it afterwards would compare the repo against itself and warn on
-	 * every repo that has ever been dirty.
+	 * The seed runs next, before anything reads state, for the upgrade reason above.
+	 *
+	 * Pins and the previous dirty count are read once, up front, so a manual rank survives a
+	 * rescan and a sustained-dirty warning knows what the last scan saw. The dirty count in
+	 * particular has to be read before this scan writes its own: reading it afterwards would
+	 * compare the repo against itself and warn on every repo that has ever been dirty.
 	 */
 	async refresh(): Promise<Project[]> {
 		await this.pinWrites.settle();
+		await this.seedStateFromLegacyNotes();
+
 		const facts = scanProjects(this.settings.scanRoot);
-		const pins = await readPins(this.app, this.settings);
-		const previousDirty = await readPreviousDirty(this.app, this.settings);
 		const now = Date.now();
+		const { pins, previousDirty } = this.settings.state;
 
 		this.projects = facts.map((fact: RepoFacts) => ({
 			facts: fact,
 			score: scoreRepo(fact, now, this.settings.weights),
-			pin: pins.get(fact.name) ?? 0,
-			health: healthSignals(fact, previousDirty.get(fact.name) ?? null, now),
+			pin: pinRankFor(pins, fact.name),
+			health: healthSignals(fact, previousDirtyFor(previousDirty, fact.name), now),
 		}));
 
 		const notes = await syncAllNotes(this.app, this.settings, this.projects, now);
@@ -386,16 +456,39 @@ export default class ProjectTrackerPlugin extends Plugin {
 			if (notePath) project.notePath = notePath;
 		}
 
-		// Read back what summaries already exist. A project with no summary note is
+		// Read back what summaries already exist. A project with no summary is
 		// the normal case, so nothing is created here: this only looks.
-		const states = await readSummaryStates(this.app, this.settings, this.projects);
+		const states = readSummaryStates(
+			this.settings,
+			this.projects,
+			(project) => headSha(project.path),
+		);
 		for (const project of this.projects) {
 			const state = states.get(project.facts.name);
 			if (state) project.summary = state;
 			else delete project.summary;
 		}
 
+		await this.saveScanState();
+
 		return this.projects;
+	}
+
+	/**
+	 * Record this scan's uncommitted counts so the next scan can tell a pile from a day's work.
+	 *
+	 * Only what git actually reported. A repo git could not read is left at whatever it was,
+	 * because `RepoFacts.gitReadable` exists precisely to say that its absent values are
+	 * unreliable: overwriting a real 144 with the 0 of a failed scan would make the warning
+	 * stop firing on the one project it is about.
+	 */
+	private async saveScanState(): Promise<void> {
+		const previousDirty = { ...this.settings.state.previousDirty };
+		for (const project of this.projects) {
+			if (project.facts.gitReadable) previousDirty[project.facts.name] = project.facts.dirtyCount;
+		}
+		this.settings.state.previousDirty = previousDirty;
+		await this.saveSettings();
 	}
 
 	/**
@@ -492,8 +585,26 @@ export default class ProjectTrackerPlugin extends Plugin {
 		}
 
 		const nextHead = buildGitContext(project.facts, 1).head;
+		// Freshness is machine state, so it is persisted here rather than read back out of the
+		// note that holds the text. The note is a cache of the model's answer; this is the fact
+		// the staleness check compares against the repo, and the two have different lifetimes.
+		const record: SummaryRecord = {
+			generatedAt: stamp.generatedAt,
+			commit: stamp.commit,
+			dirtyCount: stamp.dirtyCount,
+		};
+		this.settings.state.summaries[name] = record;
+		// Persisted before anything reports success. If this fails the note is still written and
+		// the panel will call the project un-summarised until the next generation, which is worse
+		// than saying so. It must not go through `fail`, which claims no summary was written.
+		try {
+			await this.saveSettings();
+		} catch (error) {
+			const message = `The summary was written, but its freshness could not be saved, so the panel will not show it as current until the next one is generated (${String(error)}).`;
+			this.errors().record({ provider, project: name, message });
+			new Notice(`Project Tracker: ${name} summary written. ${message} ${this.errors().whereSentence}`, 0);
+		}
 		const state: SummaryState = {
-			path: target,
 			generatedAt: stamp.generatedAt,
 			commit: stamp.commit,
 			dirty: stamp.dirtyCount > 0,
@@ -554,10 +665,19 @@ export default class ProjectTrackerPlugin extends Plugin {
 		// The editor command is a string with no valid values to reject, so it only
 		// needs trimming: a field left as spaces is the same as an empty one.
 		if (typeof this.settings.editorCommand !== "string") this.settings.editorCommand = "";
+
+		// Replaced rather than merged, and validated field by field, for the same reason the
+		// weights are: data.json is a file a person can edit. `version` survives as it was
+		// found rather than being forced to current, because a load must not mark an unseeded
+		// upgrade as seeded.
+		this.settings.state = sanitizeMachineState(loaded?.state);
 	}
 
 	async saveSettings(): Promise<void> {
-		await this.saveData(this.settings);
+		// Every settings write goes through one chain. `PinQueue` lets pin writes for different
+		// projects run at once, and each of those now serialises this whole file, so two
+		// overlapping writes can otherwise interleave and lose one of the two changes.
+		await this.settingsWrites.run(() => this.saveData(this.settings));
 	}
 }
 

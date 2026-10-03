@@ -1,17 +1,21 @@
 /**
- * The summary note: where it lives, what marks it as machine-written, and when
- * it has gone stale.
+ * The AI summary: what it records, and when it has gone stale.
  *
  * Explicit `.ts` extensions and no `obsidian` import, so `node --test` loads it
  * directly.
  */
 import { normalizePath } from "./obsidian-compat.ts";
-import type { PluginSettings, RepoFacts, SummaryState } from "./types.ts";
+import type { PluginSettings, RepoFacts } from "./types.ts";
 
 /** Suffix distinguishing a generated note from the user's own. */
 export const AI_SUFFIX = "-ai";
 
-/** Frontmatter keys the plugin owns in a summary note. */
+/**
+ * Frontmatter keys the v0.1 summary notes carried.
+ *
+ * Kept because those notes exist on disk for anyone who used them, and the one-time upgrade
+ * reads them. Nothing writes them any more: freshness is machine state in data.json.
+ */
 export interface SummaryFrontmatter {
 	project?: string;
 	repo_path?: string;
@@ -113,7 +117,14 @@ export function wasDirty(stamp: FreshnessStamp): boolean {
 	return stamp.dirtyCount > 0;
 }
 
-/** Why a summary no longer describes the repo, or "" when it still does. */
+/**
+ * Why a summary no longer describes the repo, or "" when it still does.
+ *
+ * `stamp` is the pair of fields this reads rather than a whole `FreshnessStamp`, so the same
+ * comparison serves a record persisted in data.json and a stamp read off a note. One
+ * question, one implementation, because two of those is how they start disagreeing about
+ * whether a summary is out of date.
+ */
 export interface StaleReason {
 	stale: boolean;
 	reason: string;
@@ -127,7 +138,11 @@ export interface StaleReason {
  * describing a repository state that no longer exists, which is exactly the
  * failure mode a summary without this check invites.
  */
-export function detectStale(stamp: FreshnessStamp, facts: RepoFacts, currentHead: string | null): StaleReason {
+export function detectStale(
+	stamp: Pick<FreshnessStamp, "commit" | "dirtyCount">,
+	facts: RepoFacts,
+	currentHead: string | null,
+): StaleReason {
 	if (stamp.commit === null || currentHead === null) {
 		// A repo with no commits cannot be compared. Not knowing is not the same
 		// as being out of date, so this is not reported as stale.
@@ -143,40 +158,6 @@ export function detectStale(stamp: FreshnessStamp, facts: RepoFacts, currentHead
 		};
 	}
 	return { stale: false, reason: "" };
-}
-
-/** Read a note's frontmatter keys back into a stamp. */
-export function stampFromFrontmatter(fm: SummaryFrontmatter | undefined): FreshnessStamp | null {
-	if (!fm || fm.ai_generated !== true) return null;
-	const commit = typeof fm.commit === "string" && fm.commit.length > 0 ? fm.commit : null;
-	const dirtyCount = typeof fm.dirty_count === "number" && Number.isFinite(fm.dirty_count) ? fm.dirty_count : 0;
-	return {
-		generatedAt: typeof fm.generated_at === "string" ? fm.generated_at : "",
-		commit,
-		dirtyCount,
-		branch: null,
-	};
-}
-
-/** Read a note's frontmatter back into the state the panel renders. */
-export function stateFromFrontmatter(
-	fm: SummaryFrontmatter | undefined,
-	path: string,
-	facts: RepoFacts,
-	currentHead: string | null,
-): SummaryState | null {
-	const stamp = stampFromFrontmatter(fm);
-	if (!stamp) return null;
-	const { stale, reason } = detectStale(stamp, facts, currentHead);
-	return {
-		path,
-		generatedAt: stamp.generatedAt || null,
-		commit: stamp.commit,
-		dirty: stamp.dirtyCount > 0,
-		dirtyCount: stamp.dirtyCount,
-		stale,
-		staleReason: reason,
-	};
 }
 
 /** The parsed model reply, ready to render. */

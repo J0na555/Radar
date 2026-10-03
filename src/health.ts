@@ -36,10 +36,14 @@ function count(count: number, singular: string, pluralForm: string): string {
 /**
  * A working tree that was already a pile last scan.
  *
- * Two scans, not a time series. The previous scan's dirty count is already persisted in the
- * project note's `dirty` frontmatter, written on every scan, so "sustained" costs nothing
- * extra to detect and no history file has to exist. That bounds the claim honestly: it means
- * "this has survived at least one scan".
+ * Two scans, not a time series. The previous scan's dirty count is kept in the plugin's own
+ * state in data.json, written on every scan, so "sustained" costs nothing extra to detect and
+ * no history file has to exist. That bounds the claim honestly: it means "this has survived at
+ * least one scan".
+ *
+ * It was in each project note's frontmatter once. Note frontmatter is where the user writes,
+ * so a value that has to be right to be worth showing cannot live there: a note rewritten or
+ * deleted takes the warning's memory with it, and the warning quietly never fires again.
  */
 function sustainedDirty(facts: RepoFacts, previousDirtyCount: number | null): HealthSignal | null {
 	if (facts.dirtyCount < SUSTAINED_DIRTY_THRESHOLD) return null;

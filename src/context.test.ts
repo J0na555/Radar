@@ -12,6 +12,7 @@ import {
 	COMMIT_COUNT_DEFAULT,
 	parsePorcelainPath,
 } from "./context.ts";
+import { emptyMachineState } from "./machine-state.ts";
 import { DEFAULT_WEIGHTS } from "./rank.ts";
 import type { PluginSettings, RepoFacts } from "./types.ts";
 
@@ -218,7 +219,7 @@ describe("parsePorcelainPath", () => {
 describe("buildPrompt", () => {
 	const settings: PluginSettings = {
 		scanRoot: "/repos",
-		notesFolder: "private/Project Tracker/projects",
+		notesFolder: "Projects",
 		showDormant: false,
 		explainScores: false,
 		weights: { ...DEFAULT_WEIGHTS },
@@ -227,6 +228,7 @@ describe("buildPrompt", () => {
 		timeoutSeconds: 120,
 		editorCommand: "",
 		detection: { checkedAt: 0, probes: [], selected: null },
+		state: emptyMachineState(),
 	};
 
 	const context = {
@@ -299,6 +301,6 @@ describe("buildPrompt", () => {
 	it("has a plausible settings fixture for future tests", () => {
 		// Not an assertion about behaviour: keeps the fixture honest if the shape of
 		// PluginSettings changes.
-		assert.equal(settings.notesFolder, "private/Project Tracker/projects");
+		assert.equal(settings.notesFolder, "Projects");
 	});
 });

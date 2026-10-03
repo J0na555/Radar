@@ -24,6 +24,7 @@ import {
 	sanitizeProbes,
 	selectProvider,
 } from "./provider";
+import { PinQueue } from "./pin-queue";
 import { DEFAULT_WEIGHTS, scoreRepo, sanitizeWeights } from "./rank";
 import { StartupLog } from "./startup-log";
 import {
@@ -96,6 +97,15 @@ export default class ProjectTrackerPlugin extends Plugin {
 	settings: PluginSettings = { ...DEFAULT_SETTINGS };
 	private projects: Project[] = [];
 	private errorLog: ErrorLog | null = null;
+
+	/**
+	 * Pin writes in flight, ordered per project, and the wait that drains them.
+	 *
+	 * Here rather than in the view because `refresh` below reads pins back out of the
+	 * notes, and there are two ways into `refresh`: the panel's Refresh button and the
+	 * command palette's "Rescan projects". A guard on one caller is not the invariant.
+	 */
+	private readonly pinWrites = new PinQueue();
 
 	/**
 	 * Register everything the plugin adds to the workspace.
@@ -341,15 +351,37 @@ export default class ProjectTrackerPlugin extends Plugin {
 	}
 
 	/**
+	 * Queue one pin write for one project, behind whatever is already writing it.
+	 *
+	 * `target` is a function rather than a rank because the write is queued: a `p`
+	 * pressed twice has to read the rank the first press left, not the one that was on
+	 * screen when the second key went down.
+	 *
+	 * The write itself belongs to the caller, because drawing the row before the write
+	 * and putting it back after a failure is the view's business. This owns only the
+	 * ordering, which is what `refresh` has to wait on.
+	 */
+	queuePinWrite(project: Project, target: () => number, write: (pin: number) => Promise<void>): Promise<void> {
+		return this.pinWrites.queue(project.facts.name, () => write(target()));
+	}
+
+	/**
 	 * Rescan, score, then write the per-project notes.
 	 *
-	 * Pins and the previous dirty count are read before scoring so a manual rank
-	 * survives a rescan and a sustained-dirty warning knows what the last scan
-	 * saw. Both must happen before the notes are written: the dirty count is
-	 * written by this very scan, so reading it afterwards would compare the repo
-	 * against itself and warn on every repo that has ever been dirty.
+	 * Settles the pin queue first, because this is where pins are read back out of the
+	 * notes. A pin write that has not landed yet reads as absent, and this method
+	 * replaces `this.projects` with new objects, so an in-flight write would leave the
+	 * panel showing one rank and the note holding another. Both entry points reach
+	 * this line, so both are covered.
+	 *
+	 * Pins and the previous dirty count are then read before scoring so a manual rank
+	 * survives a rescan and a sustained-dirty warning knows what the last scan saw.
+	 * Both must happen before the notes are written: the dirty count is written by
+	 * this very scan, so reading it afterwards would compare the repo against itself
+	 * and warn on every repo that has ever been dirty.
 	 */
 	async refresh(): Promise<Project[]> {
+		await this.pinWrites.settle();
 		const facts = scanProjects(this.settings.scanRoot);
 		const pins = await readPins(this.app, this.settings);
 		const previousDirty = await readPreviousDirty(this.app, this.settings);

@@ -202,9 +202,9 @@ describe("weak matches", () => {
 		// FIRST_BOUNDARY + MATCH = 34 and half of it is 17, which is one point above
 		// MATCH = 16, the most a mid-word match can score. Every one of these names used
 		// to come out dimmed by that one point.
-		assert.equal(weakMatchThreshold("c"), 0);
-		assert.equal(weakMatchThreshold(""), 0);
-		assert.equal(weakMatchThreshold("   "), 0);
+		assert.equal(weakMatchThreshold("c"), Number.NEGATIVE_INFINITY);
+		assert.equal(weakMatchThreshold(""), Number.NEGATIVE_INFINITY);
+		assert.equal(weakMatchThreshold("   "), Number.NEGATIVE_INFINITY);
 		const OLD_THRESHOLD_FOR_ONE_LETTER = 17;
 		for (const [query, name] of [
 			["c", "hcode"],
@@ -214,6 +214,31 @@ describe("weak matches", () => {
 			assert.ok(
 				score(query, name) < OLD_THRESHOLD_FOR_ONE_LETTER,
 				`${query} in ${name} should score under the old threshold`,
+			);
+		}
+	});
+
+	it("does not dim a one-character match in a long name", () => {
+		// The exemption used to return 0, which quietly kept an 18-character limit: a
+		// mid-word single-character match scores MATCH minus one point per unmatched
+		// name character, so on the 17th character it lands on 0 and on the 18th on -1.
+		// Any project name of 18 characters or more came out dimmed for every
+		// one-character query, which is most of them.
+		//
+		// The scores stay negative on purpose. Slack is subtracted for name characters
+		// the query did not use, which is what makes the tighter of two equally good
+		// names win; the fix is the threshold, not the score.
+		for (const name of [
+			"abcdefghijklmnopq", // 17 characters: exactly 0, the last that passed
+			"abcdefghijklmnopqr", // 18: -1, the first that did not
+			"abcdefghijklmnopqrstuvwxyz", // 26: -9
+		]) {
+			const single = score("q", name);
+			assert.ok(single !== null, `q is not in ${name}`);
+			assert.equal(
+				single < weakMatchThreshold("q"),
+				false,
+				`one-character match in ${name} would be dimmed at ${single}`,
 			);
 		}
 	});

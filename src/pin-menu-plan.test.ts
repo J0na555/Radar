@@ -105,13 +105,23 @@ describe("move up cannot unpin a project", () => {
 		}
 	});
 
-	it("clamps the rank it writes, so 0 cannot come out of it", () => {
-		// Belt and braces against the guard above being edited back into arithmetic
-		// that trusts the current rank.
-		for (const pin of [2, 3, 50, LAST_PIN]) {
-			const written = writes(pinMenuPlan(project(pin), 1), "moveUp");
-			assert.ok(written !== undefined, `no move up at ${pin}`);
-			assert.ok(written >= 1, `move up from ${pin} would write ${written}`);
+	it("writes exactly one rank lower, and only when one lower is still a pin", () => {
+		// What pins "Move up" is the `pin > 1` guard and nothing else, so the whole
+		// range is swept and both halves are asserted: absent at 0 and 1, present above
+		// them, and writing `pin - 1` rather than anything else.
+		//
+		// This replaces a test that checked the item "clamps the rank it writes". The
+		// clamp could not be reached and could not be distinguished from removing it, so
+		// deleting it left the suite green. Asserting the exact rank fails on any
+		// off-by-one in the arithmetic and on any guard edited back to `pin > 0`.
+		for (const pin of [0, 1, 2, 3, 7, 100, LAST_PIN, LAST_PIN + 1]) {
+			const items = pinMenuPlan(project(pin), 1);
+			if (pin > 1) {
+				assert.equal(actions(items).includes("moveUp"), true, `no move up at ${pin}`);
+				assert.equal(writes(items, "moveUp"), pin - 1, `move up from ${pin}`);
+			} else {
+				assert.equal(actions(items).includes("moveUp"), false, `move up offered at ${pin}`);
+			}
 		}
 	});
 

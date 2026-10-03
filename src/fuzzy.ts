@@ -86,9 +86,18 @@ export function weakMatchThreshold(query: string): number {
 	// most MATCH, so every one of them was dimmed however good it was, and typing "c"
 	// greyed out almost the whole panel by construction.
 	//
+	// The exemption is -Infinity rather than 0, and the difference is a length limit.
+	// A mid-word single-character match scores MATCH minus one point per name
+	// character the query did not use, so on a 17-character name it lands exactly on
+	// 0 and on an 18-character name on -1. A threshold of 0 therefore still dimmed
+	// every match in any name of 18 characters or more, which is where projects like
+	// "obsidian-plugin" live. Nothing a one-character query matches can be scattered,
+	// so there is no score it should be dimmed for, and no threshold below every score
+	// is the honest way to say that.
+	//
 	// Rows still sort best match first, so the ordering carries the quality the dimming
 	// used to; they just are not all dimmed.
-	if (length <= 1) return 0;
+	if (length <= 1) return Number.NEGATIVE_INFINITY;
 	return bestPossibleScore(query) * WEAK_MATCH_RATIO;
 }
 

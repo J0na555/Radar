@@ -10,7 +10,9 @@ import { PanelHeader } from "./panel-header";
 import { bindPanelKeys, unbindPanelKeys } from "./panel-keys";
 import { showPinMenu } from "./pin-menu";
 import type { PinMenuActions } from "./pin-menu";
+import { applyPin } from "./pin-queue";
 import { rankProjects, topPinRank } from "./rank";
+import { isInsideScrollBox } from "./scroll";
 import type { Project, PluginSettings, SummaryState } from "./types";
 
 export const VIEW_TYPE_PROJECT_TRACKER = "project-tracker-view";
@@ -31,11 +33,13 @@ export class ProjectTrackerView extends ItemView {
 	/** Project names with a summary run in flight, so the button cannot double-fire. */
 	private summarizing = new Set<string>();
 	/**
-	 * The tail of each project's pin writes, by project name. See `queuePin`.
+	 * True from `onClose` on, so nothing that settles late draws into a dead view.
 	 *
-	 * Cleared on close so a closed view holds no promise from a panel that is gone.
+	 * A pin write outlives the panel that started it: it is a note write, not a redraw.
+	 * The queue itself lives in the plugin (see `plugin.refresh`), so a queued write
+	 * still has to finish after this view is gone.
 	 */
-	private pinWrites = new Map<string, Promise<void>>();
+	private closed = false;
 
 	/**
 	 * The parts of the filter the view owns.
@@ -69,6 +73,15 @@ export class ProjectTrackerView extends ItemView {
 			getProjects: () => Project[];
 			/** Write one project's pin without rescanning. False when the write failed. */
 			savePin: (project: Project) => Promise<boolean>;
+			/**
+			 * Hand one pin write to the plugin's queue, which orders it per project and
+			 * which `plugin.refresh` waits on before it reads pins back out of the notes.
+			 */
+			queuePinWrite: (
+				project: Project,
+				target: () => number,
+				write: (pin: number) => Promise<void>,
+			) => Promise<void>;
 			generateSummary: (project: Project) => Promise<SummaryState | null>;
 			/** Hand a project's folder to the configured editor. */
 			openRepoFolder: (project: Project) => Promise<void>;
@@ -80,18 +93,25 @@ export class ProjectTrackerView extends ItemView {
 	}
 
 	override async onOpen(): Promise<void> {
+		// Cleared again in case this instance is ever reopened, so the flag can only
+		// ever mean "the view is not on screen", never "it was not at some point".
+		this.closed = false;
 		this.buildChrome();
 		this.registerKeys();
 		await this.refresh();
 	}
 
 	override async onClose(): Promise<void> {
+		// Set first, so anything that settles while this method is running draws
+		// nothing. A pin write or a summary finishing afterwards used to reach
+		// `render`, which found `header === null` and called `buildChrome`, putting a
+		// fresh header into a view Obsidian has already torn down.
+		this.closed = true;
 		// Unregistered by hand rather than left to the scope, so a closed view holds
 		// no reference to this project's actions.
 		unbindPanelKeys(this.scope, this.keyHandlers);
 		this.keyHandlers = [];
 		this.scope = null;
-		this.pinWrites.clear();
 		this.summarizing.clear();
 		this.header?.destroy();
 		this.header = null;
@@ -111,7 +131,13 @@ export class ProjectTrackerView extends ItemView {
 		return ICON_PROJECT_TRACKER;
 	}
 
-	/** Rescan the filesystem, then redraw. The only thing that forks `git`. */
+	/**
+	 * Rescan the filesystem, then redraw. The only thing that forks `git`.
+	 *
+	 * The pin queue is settled inside `plugin.refresh`, not here. It used to be settled
+	 * here, which covered this one path and left "Rescan projects" in the command
+	 * palette racing any pin in flight.
+	 */
 	async refresh(): Promise<void> {
 		if (this.scanning) return;
 		this.scanning = true;
@@ -119,7 +145,6 @@ export class ProjectTrackerView extends ItemView {
 		// appearing to hang for a fifth of a second.
 		this.render();
 		try {
-			await this.settlePinWrites();
 			await this.plugin.refresh();
 			this.projects = this.plugin.getProjects();
 			this.now = Date.now();
@@ -157,6 +182,9 @@ export class ProjectTrackerView extends ItemView {
 	 * it, and neither failure is visible until somebody uses them.
 	 */
 	private render(): void {
+		// A pin write or a summary that settles after the view closed would otherwise
+		// find `header === null` and rebuild the chrome into a view that is gone.
+		if (this.closed) return;
 		// Something outside the plugin can empty a view between renders. Drawing into
 		// detached elements shows nothing at all, so rebuild rather than go blank.
 		if (!this.header || !this.contentEl.contains(this.header.rowsEl)) this.buildChrome();
@@ -209,7 +237,7 @@ export class ProjectTrackerView extends ItemView {
 		this.visible = result.rows.map((row, index) => ({ row, el: els[index] }));
 
 		header.rowsEl.scrollTop = scrolled;
-		this.scrollSelectionIntoView();
+		this.scrollSelectionIntoView(header.rowsEl);
 	}
 
 	/**
@@ -223,32 +251,31 @@ export class ProjectTrackerView extends ItemView {
 	 * `scrolledToName` is unchanged, the early return fires and the highlight can
 	 * end up off screen. Pressing `p` again would then appear to do nothing.
 	 *
-	 * Instead, after the scroll restore, check whether the selected element is
-	 * actually inside its scroll container's visible box and scroll only if it is
-	 * not. This is O(1), handles pin, unpin, filter and `j`/`k` uniformly, and
-	 * still protects against background renders yanking the viewport: if the
-	 * element is already visible, we do not scroll. This preserves the property
-	 * the name check was protecting without the false positive that broke the
-	 * flagship `p` interaction.
+	 * So after the scroll restore, check the selected element against the box it is
+	 * actually scrolled inside, and scroll only if it is not visible there.
+	 *
+	 * The scroller is `header.rowsEl`, passed in, and that detail is the whole fix.
+	 * This used to ask the row for its `offsetParent`, which is the nearest
+	 * *positioned* ancestor. `.pt-body` declares no `position`, so it can never be the
+	 * answer: the comparison ran against a higher box that starts above `.pt-body` by
+	 * the height of the title, controls and status line. A row scrolled a little way
+	 * past the top of the list sits in that band, inside the ancestor's rect, so
+	 * `isVisible` came out true and nothing scrolled. Pinning a row from the middle of
+	 * the list jumps it to the top, which is exactly such a case, so the flagship `p`
+	 * interaction stayed broken for any jump shorter than the header.
+	 *
+	 * O(1), and it handles pin, unpin, filter and `j`/`k` uniformly, while still
+	 * protecting against background renders yanking the viewport: an element already
+	 * visible does not scroll.
+	 *
+	 * Not covered by a test, because it needs real layout. What is tested is the
+	 * decision in `scroll.ts`, against the two boxes this mistake produced.
 	 */
-	private scrollSelectionIntoView(): void {
+	private scrollSelectionIntoView(scroller: HTMLElement): void {
 		const selected = this.visible[this.selectedIndex];
 		if (!selected) return;
 		const el = selected.el;
-		const container = el.offsetParent as HTMLElement | null;
-		const scrollContainer = container ?? el.parentElement;
-		if (!scrollContainer) {
-			el.scrollIntoView({ block: "nearest" });
-			return;
-		}
-		const containerRect = scrollContainer.getBoundingClientRect();
-		const elRect = el.getBoundingClientRect();
-		const isVisible =
-			elRect.top >= containerRect.top - 1 &&
-			elRect.bottom <= containerRect.bottom + 1 &&
-			elRect.left >= containerRect.left - 1 &&
-			elRect.right <= containerRect.right + 1;
-		if (!isVisible) {
+		if (!isInsideScrollBox(scroller.getBoundingClientRect(), el.getBoundingClientRect())) {
 			el.scrollIntoView({ block: "nearest" });
 		}
 	}
@@ -330,18 +357,12 @@ export class ProjectTrackerView extends ItemView {
 	/**
 	 * Queue a pin write for one project, behind whatever is already writing it.
 	 *
-	 * `target` is a function rather than a rank because the write is queued: a `p`
-	 * pressed twice has to read the rank the first press left, not the one that was on
-	 * screen when the second key went down.
+	 * The ordering lives in the plugin (`pin-queue.ts`) because the plugin's
+	 * `refresh` is the thing that has to wait for it, and two callers reach that.
+	 * What is left here is the part that is about this panel.
 	 */
 	private queuePin(project: Project, target: () => number): Promise<void> {
-		const name = project.facts.name;
-		const queued = (this.pinWrites.get(name) ?? Promise.resolve()).then(() => this.writePin(project, target()));
-		// The stored tail must never reject. A rejected one would leave the next pin for
-		// this project queued behind a promise that never settles, so it would silently
-		// never run. `writePin` reports its own failures to the user.
-		this.pinWrites.set(name, queued.catch(() => {}));
-		return queued;
+		return this.plugin.queuePinWrite(project, target, (pin) => this.writePin(project, pin));
 	}
 
 	/**
@@ -352,50 +373,21 @@ export class ProjectTrackerView extends ItemView {
 	 * make a 45-row list easier to use. The pin is one field of one note, so it is
 	 * written on its own.
 	 *
-	 * The row is drawn before the write and put back if the write fails, so what the
-	 * user sees either matches the note or says why it does not.
-	 *
-	 * Only ever reached with the previous write for this project already settled, so
-	 * `previous` is the rank the last write actually landed rather than the rank that
-	 * happened to be on screen when this one was queued. That is what makes the
-	 * rollback safe: there is no newer write in flight for it to overwrite.
-	 *
-	 * Two writes for one project used to interleave, and the first one's rollback could
-	 * land after the second one succeeded: a pin at 1 opening while a pin at 2 was
-	 * already in flight, the 2 landed, the rollback put the row back at 0, and the note
-	 * said 2. Queued in order instead, every outcome leaves the panel and the note
-	 * saying the same thing, including both writes failing.
+	 * `applyPin` does the draw-write-rollback, because that ordering is what has to be
+	 * tested and this file cannot be loaded by the test runner. The rollback is only
+	 * safe because the queue runs this after the previous write for this project has
+	 * settled; see `PinQueue`.
 	 */
 	private async writePin(project: Project, pin: number): Promise<void> {
-		const previous = project.pin;
-		project.pin = pin;
-		this.render();
-		if (await this.plugin.savePin(project)) return;
-		project.pin = previous;
-		this.render();
+		const saved = await applyPin(project, pin, {
+			save: (target) => this.plugin.savePin(target),
+			onChange: () => this.render(),
+		});
+		if (saved) return;
 		new Notice(
 			`Project Tracker: could not save the pin for ${project.facts.name}. ${this.plugin.errorLogSentence}`,
 			0,
 		);
-	}
-
-	/**
-	 * Wait until no pin write is in flight.
-	 *
-	 * `refresh` reads every pin back out of the notes, so a write that has not landed
-	 * yet is read as absent: the rescan replaces the project objects the write is
-	 * holding, and the panel ends up showing the note's old rank while that write then
-	 * succeeds. Settling first means no write is ever in flight across a rescan.
-	 *
-	 * Loops because a pin can be queued while the first batch is being awaited, and one
-	 * snapshot would leave that write racing the scan. It settles as soon as the user
-	 * stops pinning; holding `p` down keeps the rescan waiting, which is the right way
-	 * round.
-	 */
-	private async settlePinWrites(): Promise<void> {
-		while (this.pinWrites.size > 0) {
-			await Promise.all(this.pinWrites.values());
-		}
 	}
 
 	/**

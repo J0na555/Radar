@@ -73,7 +73,12 @@ export function pinMenuPlan(
 			items.push({
 				title: "Move up",
 				icon: "arrow-up",
-				pin: Math.max(1, project.pin - 1),
+				// Plain arithmetic, no clamp: the guard above means `pin - 1` is already at
+				// least 1, so a `Math.max(1, ...)` here would never change an answer.
+				// It looked like a second line of defence and was not one, because the
+				// guard it appeared to protect is what actually keeps 0 off this item, and
+				// that is what the tests in `pin-menu-plan.test.ts` pin.
+				pin: project.pin - 1,
 				action: "moveUp",
 			});
 		}

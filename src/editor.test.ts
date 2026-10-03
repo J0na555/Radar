@@ -172,13 +172,21 @@ describe("openRepoFolder launching", () => {
 		// into two and the editor would have received a path that does not exist.
 		const call = editor.calls();
 		assert.equal(call[0], repo);
-		assert.ok(call.includes("finished"));
+		// Waited for, not asserted straight away. The script writes "started" and
+		// "finished" in two separate appends with the sleep between them, so the file
+		// is briefly readable with the first marker present and the second not yet
+		// written. Reading it synchronously here made this fail under parallel load
+		// without the code under test changing at all.
+		assert.ok(
+			await waitFor(() => editor.calls().includes("finished")),
+			"fake editor never recorded finishing, so it did not run to completion",
+		);
 	});
 
 	it("returns while the editor is still running", { skip }, async () => {
 		const dir = tmp("pt-open-nonblocking-");
 		const repo = gitRepoIn(dir, "repo");
-		const editor = recordingEditor(dir, 2);
+		const editor = recordingEditor(dir, 4);
 
 		const started = Date.now();
 		const result = openRepoFolder(facts(repo), editor.script, () => {});
@@ -186,10 +194,9 @@ describe("openRepoFolder launching", () => {
 
 		assert.equal(result.ok, true);
 		// The machine-independent claim: the call came back before the child's own
-		// minimum lifetime of 2000ms, so it did not wait for the editor to close.
-		// Deliberately not a tighter number: this suite runs in parallel with ten
-		// others and a spawn can take its time.
-		assert.ok(elapsed < 2000, `launch blocked for ${elapsed}ms, past the editor's own 2000ms`);
+		// minimum lifetime of 4000ms, so it did not wait for the editor to close.
+		// Give real headroom because this suite runs in parallel and scheduling can jitter.
+		assert.ok(elapsed < 2000, `launch blocked for ${elapsed}ms, past 2000ms headroom`);
 
 		// The point of the measurement: the editor is provably mid-session, so the
 		// call really did not wait for it.

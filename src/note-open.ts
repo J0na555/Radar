@@ -32,17 +32,20 @@ export async function openProjectNote(app: App, project: Project | null): Promis
 		return;
 	}
 	new Notice(
-		`Project Tracker: no note for ${project.facts.name}. Write one named ${project.facts.name}.md, or put tracked: true in its frontmatter, and it will be linked from the dashboard.`,
+		`Project Tracker: no note for ${project.facts.name}. Write one named ${project.facts.name}.md anywhere in the vault, or put "tracked: ${project.facts.name}" in a note's frontmatter, and it will be linked from the dashboard.`,
 	);
 }
 
 /**
  * Open the note holding one project's AI summary.
  *
- * `target` is where the summaries live, passed in rather than read off the state: freshness
- * no longer knows where its own text is, and a field that named a file would be naming one
- * that a user can rename or delete at any time. The caller resolves it once, so there is a
- * single answer to "where the summaries are" even after they move.
+ * Every summary is in one file now, so the target is the dashboard rather than anything derived
+ * from the project. It is still passed in rather than read off the project: the summary state
+ * knows what a summary was generated from and not where its text lives, and a field naming a
+ * file would be naming one the user can rename or delete at any time.
+ *
+ * A project with no summary is a no-op. There is nothing to open and nothing is wrong, and the
+ * same keystroke reaches this from the panel and from the search box.
  */
 export async function openSummaryNote(app: App, project: Project, target: string): Promise<void> {
 	if (!project.summary) return;
@@ -51,5 +54,7 @@ export async function openSummaryNote(app: App, project: Project, target: string
 		await app.workspace.getLeaf(false).openFile(file);
 		return;
 	}
-	new Notice(`Project Tracker: ${target} is not in the vault any more. Regenerate the summary to write it.`);
+	new Notice(
+		`Project Tracker: ${target} is not in the vault. It is the dashboard, which the plugin creates on the next scan; generate the summary again after a refresh.`,
+	);
 }

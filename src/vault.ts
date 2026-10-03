@@ -1,20 +1,10 @@
 import { App, TFile, TFolder, normalizePath } from "obsidian";
-import { applyFrontmatterPatch, desiredFrontmatter, diffManaged } from "./frontmatter";
 import { spawnSync } from "child_process";
+import { assertSafeTarget, dashboardPath, renderDashboard } from "./dashboard";
+import type { NoteCandidate } from "./note-link";
 import { stateFromRecord } from "./machine-state";
 import type { LegacyNoteState, LegacySummaryFrontmatter } from "./machine-state";
-import { aiNotePath, sanitizeBase } from "./summary";
-import { PluginSettings, Project, ProjectFrontmatter, RepoFacts, ScoreResult, SummaryState } from "./types";
-
-/** Map a project name to a safe note filename. */
-export function noteFileName(projectName: string): string {
-	return `${sanitizeBase(projectName) || "untitled"}.md`;
-}
-
-/** Absolute vault-relative path of a project's note. */
-export function notePath(settings: PluginSettings, projectName: string): string {
-	return normalizePath(`${settings.notesFolder}/${noteFileName(projectName)}`);
-}
+import { PluginSettings, Project, ProjectFrontmatter, RepoFacts, SummaryState } from "./types";
 
 /** Create `folder` and any missing parents. No-op when it already exists. */
 export async function ensureFolder(app: App, folder: string): Promise<void> {
@@ -30,6 +20,140 @@ export async function ensureFolder(app: App, folder: string): Promise<void> {
 			}
 		}
 	}
+}
+
+/**
+ * Every folder in the vault, for the notes-folder dropdown.
+ *
+ * Walked rather than read off `getAllFolderPaths`, which exists but is not in every Obsidian
+ * version this plugin supports, and a settings tab that throws on an older app is worse than a
+ * slower list.
+ */
+export function listVaultFolders(app: App): string[] {
+	const root = app.vault.getRoot();
+	const found: string[] = [];
+	const walk = (folder: TFolder): void => {
+		for (const child of folder.children) {
+			if (!(child instanceof TFolder)) continue;
+			found.push(child.path);
+			walk(child);
+		}
+	};
+	walk(root);
+	return found;
+}
+
+/**
+ * Every note in the vault that could belong to a project, for `resolveProjectNote` to choose from.
+ *
+ * The whole vault is searched rather than the notes folder, because the notes folder is now the
+ * dashboard's home and a project note is wherever the user keeps their notes. A project's own
+ * project note is what that folder used to hold, so somebody upgrading has 45 notes in there and
+ * will keep adding new ones wherever they write them.
+ *
+ * The dashboard is excluded. A repository named `Dashboard` would otherwise resolve to the
+ * dashboard as its own project note and link to itself, and the plugin's one file is not a
+ * document about any one project.
+ */
+export function readNoteCandidates(app: App, settings: PluginSettings): NoteCandidate[] {
+	const dashboard = dashboardPath(settings);
+	const candidates: NoteCandidate[] = [];
+	for (const file of app.vault.getMarkdownFiles()) {
+		if (file.path === dashboard) continue;
+		// `tracked` has two forms and only one of them is a boolean. `tracked: true` promotes the
+		// note for the project it is named after; `tracked: api-ai` binds it to that project
+		// whatever it is called. A string is therefore never read as a flag: `tracked: "yes"` in a
+		// note somebody wrote is a claim about a project called "yes".
+		const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter as
+			| { tracked?: unknown }
+			| undefined;
+		const raw = frontmatter?.tracked;
+		const tracks = typeof raw === "string" && raw.trim() !== "" ? raw.trim() : null;
+		candidates.push({
+			path: file.path,
+			basename: file.basename,
+			tracked: raw === true,
+			tracks: tracks === "true" ? null : tracks,
+		});
+	}
+	return candidates;
+}
+
+/**
+ * Write the dashboard: the project table inside its markers, and nothing else.
+ *
+ * Reads before writing so a scan that changes nothing does not modify the file. The dashboard
+ * sits in the user's vault next to their own notes, and a plugin that rewrites an identical file
+ * every 30 seconds shows up as a change in whatever syncs that vault.
+ *
+ * A failure here is not worth a notice. The panel already has everything it shows; this file is a
+ * view of the same data, and a vault that cannot be written is the user's problem to see in
+ * Obsidian's own terms.
+ */
+export async function syncDashboard(
+	app: App,
+	settings: PluginSettings,
+	projects: Project[],
+	now: number = Date.now(),
+): Promise<string | null> {
+	const target = dashboardPath(settings);
+	assertSafeTarget(settings, target);
+	await ensureFolder(app, settings.notesFolder);
+
+	const existing = app.vault.getAbstractFileByPath(target);
+	let doc: string | null = null;
+	if (existing instanceof TFile) {
+		try {
+			doc = await app.vault.read(existing);
+		} catch {
+			return null;
+		}
+	}
+
+	let content: string;
+	try {
+		content = renderDashboard(doc ?? "", projects, now);
+	} catch {
+		// A generated body carrying a marker would break the section structure the next write
+		// depends on. Refusing the write keeps the note intact; the panel is unaffected.
+		return null;
+	}
+
+	return writeDashboard(app, settings, content, doc);
+}
+
+/**
+ * Write specific content to the dashboard.
+ *
+ * `previous` is what was read, or null when the file does not exist, and is only there so the
+ * write can be skipped when nothing changed. Two callers: the scan, and summary generation.
+ */
+export async function writeDashboard(
+	app: App,
+	settings: PluginSettings,
+	content: string,
+	previous: string | null,
+): Promise<string | null> {
+	const target = dashboardPath(settings);
+	assertSafeTarget(settings, target);
+	const existing = app.vault.getAbstractFileByPath(target);
+
+	if (existing instanceof TFile) {
+		if (previous === content) return target;
+		try {
+			await app.vault.modify(existing, content);
+		} catch {
+			return null;
+		}
+		return target;
+	}
+
+	try {
+		await app.vault.create(target, content);
+	} catch {
+		return null;
+	}
+	return target;
 }
 
 /**
@@ -65,107 +189,6 @@ export function readLegacyNotes(app: App, settings: PluginSettings): LegacyNoteS
 		});
 	}
 	return notes;
-}
-
-/**
- * Create or update one project's note.
- *
- * Only the managed frontmatter keys are written. The body is never read, rewritten or removed:
- * `processFrontMatter` rewrites the YAML block in place and leaves every byte after the
- * closing delimiter untouched.
- *
- * Returns the note path, or null when the note could not be written.
- */
-export async function syncProjectNote(
-	app: App,
-	settings: PluginSettings,
-	facts: RepoFacts,
-	score: ScoreResult,
-	pin: number,
-	now: number = Date.now(),
-): Promise<string | null> {
-	await ensureFolder(app, settings.notesFolder);
-	const target = notePath(settings, facts.name);
-	const desired = desiredFrontmatter(facts, score, pin, now);
-	const existing = app.vault.getAbstractFileByPath(target);
-
-	if (existing instanceof TFile) {
-		try {
-			await app.fileManager.processFrontMatter(existing, (fm) => {
-				const patch = diffManaged(fm as ProjectFrontmatter, desired);
-				applyFrontmatterPatch(fm as Record<string, unknown>, patch);
-			});
-		} catch {
-			return null;
-		}
-		return target;
-	}
-
-	const lines = Object.entries(desired)
-		.filter(([, value]) => value !== undefined && value !== null)
-		.map(([key, value]) => `${key}: ${JSON.stringify(value)}`);
-
-	const body = [
-		"---",
-		...lines,
-		"---",
-		"",
-		`# ${facts.name}`,
-		"",
-		"Notes for this project go here. The dashboard manages the frontmatter above and never touches this body.",
-		"",
-	].join("\n");
-
-	try {
-		await app.vault.create(target, body);
-	} catch {
-		return null;
-	}
-	return target;
-}
-
-/**
- * Write a batch of notes sequentially. Sequential rather than parallel on purpose:
- * `processFrontMatter` reads and rewrites the same files Obsidian is tracking, and interleaved
- * writes against one vault produce flaky results.
- */
-export async function syncAllNotes(
-	app: App,
-	settings: PluginSettings,
-	entries: { facts: RepoFacts; score: ScoreResult; pin: number }[],
-	now: number = Date.now(),
-): Promise<Map<string, string>> {
-	const written = new Map<string, string>();
-	for (const entry of entries) {
-		const path = await syncProjectNote(app, settings, entry.facts, entry.score, entry.pin, now);
-		if (path) written.set(entry.facts.name, path);
-	}
-	return written;
-}
-
-/**
- * Write one AI summary note, replacing whatever was there. The whole file is replaced rather
- * than merged, because a summary note holds only machine output and a freshness stamp.
- * Nothing the user could have written in it survives regeneration, and that is intended: the
- * note is a cache of a model call, not a document. The project note is never a target here.
- */
-export async function writeSummaryNote(
-	app: App,
-	settings: PluginSettings,
-	projectName: string,
-	content: string,
-): Promise<string | null> {
-	await ensureFolder(app, settings.notesFolder);
-	const target = aiNotePath(settings, projectName);
-	const existing = app.vault.getAbstractFileByPath(target);
-
-	try {
-		if (existing instanceof TFile) await app.vault.modify(existing, content);
-		else await app.vault.create(target, content);
-	} catch {
-		return null;
-	}
-	return target;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { homedir } from "os";
 import * as path from "path";
-import { App, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
 import {
 	buildGitContext,
 	buildPrompt,
@@ -10,10 +10,13 @@ import {
 	COMMIT_COUNT_MAX,
 	COMMIT_COUNT_MIN,
 } from "./context";
+import { dashboardPath, upsertSummaryEntry } from "./dashboard";
+import type { SummaryEntry } from "./dashboard";
 import { scanProjects } from "./git";
 import { openRepoFolder } from "./editor";
 import { healthSignals } from "./health";
 import { ErrorLog } from "./log-writer";
+import { folderChoices } from "./folder-picker";
 import {
 	detectProvidersAsync,
 	isProviderId,
@@ -33,15 +36,11 @@ import {
 	sanitizeMachineState,
 	STATE_VERSION,
 } from "./machine-state";
+import { resolveProjectNote } from "./note-link";
 import { PinQueue } from "./pin-queue";
 import { DEFAULT_WEIGHTS, scoreRepo, sanitizeWeights } from "./rank";
 import { StartupLog } from "./startup-log";
-import {
-	aiNotePath,
-	assertSafeTarget,
-	computeStamp,
-	renderSummaryNote,
-} from "./summary";
+import { computeStamp } from "./summary";
 import {
 	PluginSettings,
 	Project,
@@ -52,7 +51,15 @@ import {
 	SummaryRecord,
 	SummaryState,
 } from "./types";
-import { headSha, readLegacyNotes, readSummaryStates, syncAllNotes, writeSummaryNote } from "./vault";
+import {
+	headSha,
+	listVaultFolders,
+	readLegacyNotes,
+	readNoteCandidates,
+	readSummaryStates,
+	syncDashboard,
+	writeDashboard,
+} from "./vault";
 import { WriteChain } from "./write-chain";
 import { renderWeightSettings } from "./weight-settings";
 import {
@@ -63,7 +70,11 @@ import {
 
 const DEFAULT_SETTINGS: PluginSettings = {
 	scanRoot: path.join(homedir(), "Documents", "projects"),
-	notesFolder: "private/Project Tracker/projects",
+	// Not under private/, unlike the folder this setting used to default to. That folder held
+	// generated machine output nobody was meant to read; this one is a table of projects with
+	// links in it, which is a note a person may want to link to. Existing installs keep whatever
+	// they had, because their 45 notes are in it.
+	notesFolder: "Project Tracker",
 	showDormant: false,
 	// The "why this score" line doubles the height of the list, so it is a toggle
 	// rather than a default. The tooltip on the score needs no permission.
@@ -128,6 +139,17 @@ export default class ProjectTrackerPlugin extends Plugin {
 	 * taken before the earlier one finished.
 	 */
 	private readonly settingsWrites = new WriteChain();
+
+	/**
+	 * Dashboard writes, strictly serial, for the same reason and with a sharper edge.
+	 *
+	 * Two writers, two jobs. A scan replaces the project table; a generation splices one project's
+	 * summary into the section below it. Both read the file first, because the second one has to
+	 * preserve the first one's work. Serialising only the writes would not help: they would still
+	 * read the same version and the later write would drop the earlier change. So the read goes
+	 * on the chain too, which is why this is a chain rather than a queue keyed by project.
+	 */
+	private readonly dashboardWrites = new WriteChain();
 
 	/**
 	 * Register everything the plugin adds to the workspace.
@@ -260,14 +282,56 @@ export default class ProjectTrackerPlugin extends Plugin {
 	}
 
 	/**
-	 * Where one project's AI summary text is.
+	 * Where AI summary text is.
 	 *
-	 * The summary state knows what the summary was generated from and not where the text went,
-	 * which is deliberate: the two have different lifetimes and the plugin is about to move the
-	 * text again. One function here so there is a single answer to it.
+	 * One answer now, where there used to be one per project. The summary state knows what a
+	 * summary was generated from and not where its text went, which is deliberate: the two have
+	 * different lifetimes, and the text moved into a file whose lifetime is longer than any one
+	 * summary's.
 	 */
-	summaryTarget(project: Project): string {
-		return aiNotePath(this.settings, project.facts.name);
+	summaryTarget(): string {
+		return dashboardPath(this.settings);
+	}
+
+	/**
+	 * Add one project's summary to the dashboard, leaving the others untouched.
+	 *
+	 * Read-modify-write rather than a write, and that is the whole risk in this function. The
+	 * previous version replaced one file per project, so a failed write cost one summary. Here
+	 * the dashboard is the only copy of every summary, so a read that misses what is on disk
+	 * loses all of them.
+	 *
+	 * The whole read-splice-write goes through the dashboard chain, not just the write. A scan
+	 * writing the project table at the same moment as a generation writing a summary would
+	 * otherwise both read the same version and the second write would drop the first change,
+	 * which for a summary means deleting it. Serialising the read is what makes the second
+	 * writer see the first.
+	 */
+	private async upsertSummary(target: string, entry: SummaryEntry): Promise<string | null> {
+		return this.dashboardWrites.run(async () => {
+			const file = this.app.vault.getAbstractFileByPath(target);
+			if (!(file instanceof TFile)) {
+				// No dashboard yet. The next scan creates one, and the summary that asked for this
+				// is lost rather than reported as saved. Creating one here would mean rendering a
+				// project table for a scan that has not happened.
+				return null;
+			}
+			let doc: string;
+			try {
+				doc = await this.app.vault.read(file);
+			} catch {
+				return null;
+			}
+			let content: string;
+			try {
+				content = upsertSummaryEntry(doc, entry);
+			} catch {
+				// A generated body carrying a marker would break the section structure. The
+				// write is refused rather than corrupting the note.
+				return null;
+			}
+			return writeDashboard(this.app, this.settings, content, doc);
+		});
 	}
 
 	/** True when there is no usable cache, so a probe pass is due. */
@@ -421,7 +485,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 	}
 
 	/**
-	 * Rescan, score, then write the per-project notes.
+	 * Rescan, score, link the notes that already exist, then write the dashboard.
 	 *
 	 * Settles the pin queue first, because a queued pin write replaces a rank that this method
 	 * is about to read, and it builds new project objects: an in-flight write would leave the
@@ -450,11 +514,20 @@ export default class ProjectTrackerPlugin extends Plugin {
 			health: healthSignals(fact, previousDirtyFor(previousDirty, fact.name), now),
 		}));
 
-		const notes = await syncAllNotes(this.app, this.settings, this.projects, now);
+		// Match against the notes that are already there rather than writing any. The plugin
+		// stopped creating notes, so this decides which of somebody's existing notes each project
+		// links to, and nothing else. The dashboard is excluded from the candidates by the reader.
+		const candidates = readNoteCandidates(this.app, this.settings);
 		for (const project of this.projects) {
-			const notePath = notes.get(project.facts.name);
-			if (notePath) project.notePath = notePath;
+			const note = resolveProjectNote(project.facts.name, candidates);
+			if (note) project.notePath = note.path;
 		}
+
+		// Written after the links are resolved, because the project table has a Note column and
+		// a table full of dead wikilinks is worse than no column. On the dashboard chain rather
+		// than awaited inline, because a generation may already be splicing a summary into this
+		// file and the two must not read it at the same time.
+		await this.dashboardWrites.run(() => syncDashboard(this.app, this.settings, this.projects, now));
 
 		// Read back what summaries already exist. A project with no summary is
 		// the normal case, so nothing is created here: this only looks.
@@ -562,24 +635,17 @@ export default class ProjectTrackerPlugin extends Plugin {
 			return this.fail(name, provider, result.error);
 		}
 
-		const content = renderSummaryNote({
+		const target = dashboardPath(this.settings);
+		// The model's text goes into one entry in a section, not over a whole file. The write is
+		// therefore a read, a splice and a write, and the read has to see what is already there:
+		// this dashboard is the only copy of every other project's summary, and a generation for
+		// one project must not take the other 44 with it.
+		const written = await this.upsertSummary(target, {
 			projectName: name,
-			repoPath: project.facts.path,
-			stamp,
 			provider,
+			record: { generatedAt: stamp.generatedAt, commit: stamp.commit, dirtyCount: stamp.dirtyCount },
 			body: result.summary,
 		});
-
-		const target = aiNotePath(this.settings, name);
-		try {
-			assertSafeTarget(this.settings, name, target);
-		} catch (error) {
-			// Belt and braces: the naming makes this unreachable, but this write is
-			// the only thing standing between the user and their own notes.
-			return this.fail(name, provider, String(error));
-		}
-
-		const written = await writeSummaryNote(this.app, this.settings, name, content);
 		if (!written) {
 			return this.fail(name, provider, `could not write ${target}. Check the vault is writable.`);
 		}
@@ -734,17 +800,19 @@ class ProjectTrackerSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Notes folder")
-			.setDesc("Vault-relative folder holding one note per project. Keep it under private/ so it stays out of published builds.")
-			.addText((text) =>
-				text
-					.setPlaceholder(DEFAULT_SETTINGS.notesFolder)
-					.setValue(this.plugin.settings.notesFolder)
-					.onChange(async (value) => {
-						this.plugin.settings.notesFolder = value.trim() || DEFAULT_SETTINGS.notesFolder;
-						await this.plugin.saveSettings();
-					}),
-			);
+			.setName("Dashboard folder")
+			.setDesc(
+				"Vault folder holding Dashboard.md, the one note the plugin owns. Anything outside its two marked sections is yours and is never rewritten. Move it under private/ if you publish this vault and would rather it stayed out.",
+			)
+			.addDropdown((dropdown) => {
+				for (const choice of folderChoices(this.plugin.settings.notesFolder, listVaultFolders(this.app))) {
+					dropdown.addOption(choice.value, choice.label);
+				}
+				dropdown.setValue(this.plugin.settings.notesFolder).onChange(async (value) => {
+					this.plugin.settings.notesFolder = value;
+					await this.plugin.saveSettings();
+				});
+			});
 
 		new Setting(containerEl)
 			.setName("Show dormant projects")

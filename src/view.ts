@@ -70,7 +70,7 @@ export class ProjectTrackerView extends ItemView {
 			savePin: (project: Project) => Promise<boolean>;
 			/**
 			 * Hand one pin write to the plugin's queue, which orders it per project and
-			 * which `plugin.refresh` waits on before it reads pins back out of the notes.
+			 * which `plugin.refresh` waits on before it reads the pins back out of settings.
 			 */
 			queuePinWrite: (
 				project: Project,
@@ -78,8 +78,8 @@ export class ProjectTrackerView extends ItemView {
 				write: (pin: number) => Promise<void>,
 			) => Promise<void>;
 			generateSummary: (project: Project) => Promise<SummaryState | null>;
-			/** Where one project's AI summary text is. */
-			summaryTarget: (project: Project) => string;
+			/** Where AI summary text is. */
+			summaryTarget: () => string;
 			/** Hand a project's folder to the configured editor. */
 			openRepoFolder: (project: Project) => Promise<void>;
 			/** Where a failure is recorded, so a notice can name the file. */
@@ -440,8 +440,8 @@ export class ProjectTrackerView extends ItemView {
 	 * survives the user renaming or deleting the note, and a stored path would be a claim about
 	 * a file the plugin does not control.
 	 */
-	private summaryTarget(project: Project): string {
-		return this.plugin.summaryTarget(project);
+	private summaryTarget(): string {
+		return this.plugin.summaryTarget();
 	}
 
 	/** Everything the right-click menu can do, apart from the one label it needs. */
@@ -449,7 +449,7 @@ export class ProjectTrackerView extends ItemView {
 		return {
 			onPin: (project, pin) => void this.queuePin(project, () => pin),
 			topRank: topPinRank(this.projects),
-			onOpenSummary: (project) => void openSummaryNote(this.app, project, this.summaryTarget(project)),
+			onOpenSummary: (project) => void openSummaryNote(this.app, project, this.summaryTarget()),
 			onOpenEditor: (project) => void this.plugin.openRepoFolder(project),
 			onOpenNote: (project) => void openProjectNote(this.app, project),
 		};

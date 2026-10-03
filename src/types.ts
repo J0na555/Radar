@@ -280,9 +280,13 @@ export interface PluginSettings {
 	/** Absolute path scanned for git repositories. */
 	scanRoot: string;
 	/**
-	 * Vault-relative folder the plugin writes its notes into. The user's choice: the
+	 * Vault-relative folder the plugin writes Dashboard.md into. The user's choice: the
 	 * plugin has no idea whether this vault is published anywhere, and says nothing
 	 * about it. Empty means the vault root.
+	 *
+	 * Key name kept from when this setting named a folder of one note per project, because
+	 * renaming it in data.json would look like a lost setting to everyone upgrading. Same value
+	 * it always was: the folder those notes are still in.
 	 */
 	notesFolder: string;
 	/** Show projects with no live work and no commit in the last 30 days. */

@@ -1,7 +1,7 @@
 # Project Tracker
 
 An Obsidian sidebar plugin that shows which local git projects you are actually
-working on, ranked, with one note per project in your vault.
+working on, ranked, with one dashboard note in your vault.
 
 Desktop only. It shells out to `git`, so it does not work on mobile.
 
@@ -44,40 +44,51 @@ dormant projects".
 There is no LLM in the ranking. The score is arithmetic over git facts, so it is
 free, offline, and explainable.
 
-## Notes in your vault
+## The dashboard note
 
-Each project gets one note under `private/Project Tracker/projects/`. The plugin
-manages only these frontmatter keys:
+The plugin owns exactly one file: `Dashboard.md`, in the folder you pick in the
+settings. It has two sections, between these markers:
 
-`project`, `repo_path`, `remote`, `remote_raw`, `web`, `github`, `pinned`,
-`last_commit`, `last_commit_rel`, `dirty`, `branch`, `score`, `status`
+```markdown
+<!-- pt:projects:start -->
+<!-- pt:projects:end -->
+<!-- pt:summaries:start -->
+<!-- pt:summaries:end -->
+```
 
-| Key | What it holds |
-| --- | --- |
-| `remote` | The remote as you would open it: a browser URL for a GitHub repo, the verbatim git remote otherwise. |
-| `remote_raw` | The remote exactly as git reports it, so nothing is lost when `remote` is rewritten. |
-| `web` | The browser URL, or absent when the remote is not on github.com. |
-| `github` | The `owner/repo` slug, for anything already reading it. |
-| `last_commit` | Date of the last commit, `YYYY-MM-DD`. |
-| `last_commit_rel` | The same age in words, e.g. `31d ago`. Display only, so never sort a query on it. |
+Everything outside them is yours. The plugin rewrites only what is between a
+pair of markers and copies every other line through untouched, so you can write
+your own notes above and below them. A section whose markers are unbalanced or
+missing is treated as absent and a fresh pair is appended, rather than guessing
+at a broken span and deleting text on a hypothesis.
 
-`remote` is a URL rather than git's output because Obsidian reads
-`git@github.com:owner/repo.git` as a mailto address, so the value in the note
-opened the user's mail client instead of the repository. Only github.com is
-converted. A GitLab or self-hosted remote stays exactly as git reported it and
-gets no `web` key, rather than becoming a plausible-looking link to the wrong
-host. `last_commit` is date-only so it reads as a date in the properties panel
-and still sorts as plain text; `last_commit_rel` is a convenience for reading the
-note at a glance and goes stale between rescans.
+The **projects** section is the scan as a table: pin rank, branch, uncommitted
+count, age of the last commit, score, a link to your note, and any health
+warnings. It is replaced on every scan.
 
-The body of the note is yours. The plugin never reads, rewrites, or deletes it.
-Pin a project by right-clicking it in the sidebar. Pin ranks, the previous
-scan's dirty counts and AI summary freshness are kept in the plugin's own
-`data.json` rather than in your notes, so editing `pinned` or `dirty` in a
-note has no effect on the panel.
+The **summaries** section holds one folded AI summary per project, and only
+changes when you generate one. Nothing else touches it.
 
-Keeping the folder under `private/` means your Quartz config's
-`ignorePatterns` leaves these notes out of published builds.
+### Your own project notes
+
+The plugin does not create notes any more. It links to notes you already have,
+and picks between them in this order:
+
+1. A note whose frontmatter says `tracked: <project name>`. Explicit, and it
+   survives renaming the note.
+2. A note named after the project whose frontmatter says `tracked: true`.
+3. A note named after the project, marked or not.
+
+Step 3 is a guess, and on a large vault it will occasionally guess wrong: a
+project called `api-ai` will link to somebody else's `api-ai.md`. Both `tracked`
+forms override it. Add `tracked: <project name>` to any note to say exactly
+what it belongs to, which is worth doing once per project rather than trusting
+filenames forever.
+
+Pin ranks, the previous scan's dirty counts and AI summary freshness are kept in
+the plugin's own `data.json` rather than in your notes, so editing `pinned` or
+`dirty` in a note has no effect on the panel. Nothing in your notes is read back
+except the `tracked` key above.
 
 ## Usage
 
@@ -89,7 +100,10 @@ Keeping the folder under `private/` means your Quartz config's
 
 - **Scan root**: absolute path scanned for repositories. Defaults to
   `~/Documents/projects`.
-- **Notes folder**: vault-relative folder for generated notes.
+- **Dashboard folder**: vault-relative folder holding `Dashboard.md`, picked
+  from the folders in your vault. Defaults to `Project Tracker`. Move it under
+  `private/` if you publish your vault and would rather the dashboard stayed out
+  of published builds.
 - **Show dormant projects**: toggle visibility of dormant projects.
 
 ## Build

@@ -59,7 +59,7 @@ export interface ProjectRowOptions {
 export function createProjectRow(doc: Document, options: ProjectRowOptions): HTMLElement {
 	const { project, pinned, selected, weak, explainScores, now, summarizing } = options;
 
-	const classes = ["pt-row"];
+	const classes = ["gd-row"];
 	if (pinned) classes.push("is-pinned");
 	if (selected) classes.push("is-selected");
 	if (weak) classes.push("is-weak");
@@ -69,11 +69,11 @@ export function createProjectRow(doc: Document, options: ProjectRowOptions): HTM
 	row.className = classes.join(" ");
 
 	const main = doc.createElement("div");
-	main.className = "pt-main";
+	main.className = "gd-main";
 	row.appendChild(main);
 
 	const name = doc.createElement("div");
-	name.className = "pt-name";
+	name.className = "gd-name";
 	name.textContent = project.facts.name;
 	// The mouse equivalent of moving the cursor here and pressing Enter, and it has to select
 	// as well as open. Otherwise the panel carries two ideas of the current row: the
@@ -86,22 +86,22 @@ export function createProjectRow(doc: Document, options: ProjectRowOptions): HTM
 	main.appendChild(name);
 
 	const meta = doc.createElement("div");
-	meta.className = "pt-meta";
+	meta.className = "gd-meta";
 	main.appendChild(meta);
 	if (project.facts.branch) {
 		const branch = doc.createElement("span");
-		branch.className = "pt-branch";
+		branch.className = "gd-branch";
 		branch.textContent = project.facts.branch;
 		meta.appendChild(branch);
 	}
 	if (project.facts.dirtyCount > 0) {
 		const dirty = doc.createElement("span");
-		dirty.className = "pt-dirty";
+		dirty.className = "gd-dirty";
 		dirty.textContent = `${project.facts.dirtyCount} dirty`;
 		meta.appendChild(dirty);
 	}
 	const age = doc.createElement("span");
-	age.className = "pt-age";
+	age.className = "gd-age";
 	age.textContent = relativeAge(project.facts.lastCommit, now);
 	meta.appendChild(age);
 
@@ -114,7 +114,7 @@ export function createProjectRow(doc: Document, options: ProjectRowOptions): HTM
 	if (explainScores) main.appendChild(createWhyLine(doc, project.score));
 
 	const right = doc.createElement("div");
-	right.className = "pt-right";
+	right.className = "gd-right";
 	row.appendChild(right);
 	right.appendChild(createPinSlot(doc, pinned ? project.pin : null));
 	right.appendChild(createOpenControl(doc, options.editorLabel, () => options.onOpenEditor(project)));
@@ -147,7 +147,7 @@ export function createSummaryControl(
 	const label = running ? "…" : !summary ? "AI" : summary.stale ? "stale" : "AI";
 
 	const button = doc.createElement("button");
-	button.className = ["pt-btn", "pt-ai", summary?.stale ? "is-stale" : "", !summary ? "is-none" : ""]
+	button.className = ["gd-btn", "gd-ai", summary?.stale ? "is-stale" : "", !summary ? "is-none" : ""]
 		.filter(Boolean)
 		.join(" ");
 	button.setAttribute("type", "button");
@@ -176,7 +176,7 @@ export function createSummaryControl(
  */
 export function createOpenControl(doc: Document, label: string, onOpen: () => void): HTMLElement {
 	const button = doc.createElement("button");
-	button.className = "pt-btn pt-open";
+	button.className = "gd-btn gd-open";
 	button.setAttribute("type", "button");
 	button.setAttribute("aria-label", label);
 	button.setAttribute("title", label);
@@ -200,10 +200,10 @@ export function createOpenControl(doc: Document, label: string, onOpen: () => vo
  */
 export function createScoreSlot(doc: Document, score: ScoreResult): HTMLElement {
 	const slot = doc.createElement("span");
-	slot.className = "pt-slot pt-slot-score";
+	slot.className = "gd-slot gd-slot-score";
 
 	const value = doc.createElement("span");
-	value.className = "pt-slot-value";
+	value.className = "gd-slot-value";
 	value.textContent = String(score.score);
 	slot.appendChild(value);
 
@@ -220,12 +220,12 @@ export function createScoreSlot(doc: Document, score: ScoreResult): HTMLElement 
  */
 export function createPinSlot(doc: Document, pin: number | null): HTMLElement {
 	const slot = doc.createElement("span");
-	slot.className = "pt-slot pt-slot-pin";
+	slot.className = "gd-slot gd-slot-pin";
 	if (pin === null) return slot;
 
 	const value = doc.createElement("span");
 	slot.appendChild(value);
-	value.className = "pt-slot-value";
+	value.className = "gd-slot-value";
 	value.textContent = `#${pin}`;
 	slot.setAttribute("aria-label", `Pinned at rank ${pin}`);
 	slot.setAttribute("title", `Pinned at rank ${pin}`);
@@ -241,7 +241,7 @@ export function appendHealthBadges(host: HTMLElement, signals: HealthSignal[]): 
 	const doc = host.ownerDocument;
 	for (const signal of signals) {
 		const badge = doc.createElement("span");
-		badge.className = `pt-warn is-${signal.id}`;
+		badge.className = `gd-warn is-${signal.id}`;
 		badge.textContent = signal.badge;
 		badge.setAttribute("aria-label", signal.detail);
 		badge.setAttribute("title", signal.detail);
@@ -255,7 +255,7 @@ export function appendHealthBadges(host: HTMLElement, signals: HealthSignal[]): 
  */
 export function createWhyLine(doc: Document, score: ScoreResult): HTMLElement {
 	const line = doc.createElement("div");
-	line.className = "pt-why";
+	line.className = "gd-why";
 	line.textContent = describeScore(score);
 	return line;
 }

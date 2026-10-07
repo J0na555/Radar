@@ -15,7 +15,7 @@ import type { PluginSettings, Project, RepoFacts, SummaryRecord } from "./types.
 
 const NOW = Date.parse("2026-10-03T12:00:00.000Z");
 
-function settings(notesFolder = "Project Tracker"): PluginSettings {
+function settings(notesFolder = "Gitdeck"): PluginSettings {
 	return { notesFolder } as PluginSettings;
 }
 
@@ -70,7 +70,7 @@ function cells(row: string): string[] {
 
 describe("dashboardPath", () => {
 	it("puts the one owned file in the notes folder", () => {
-		assert.equal(dashboardPath(settings("Project Tracker")), `Project Tracker/${DASHBOARD_FILE}`);
+		assert.equal(dashboardPath(settings("Gitdeck")), `Gitdeck/${DASHBOARD_FILE}`);
 	});
 
 	it("uses the vault root for an empty folder", () => {
@@ -80,13 +80,13 @@ describe("dashboardPath", () => {
 	});
 
 	it("normalises the join", () => {
-		assert.equal(dashboardPath(settings("/Project Tracker/")), `Project Tracker/${DASHBOARD_FILE}`);
+		assert.equal(dashboardPath(settings("/Gitdeck/")), `Gitdeck/${DASHBOARD_FILE}`);
 	});
 });
 
 describe("assertSafeTarget", () => {
 	it("accepts the dashboard", () => {
-		assert.doesNotThrow(() => assertSafeTarget(settings(), `Project Tracker/${DASHBOARD_FILE}`));
+		assert.doesNotThrow(() => assertSafeTarget(settings(), `Gitdeck/${DASHBOARD_FILE}`));
 	});
 
 	it("refuses any other path", () => {
@@ -100,7 +100,7 @@ describe("assertSafeTarget", () => {
 	});
 
 	it("refuses something that is not markdown", () => {
-		assert.throws(() => assertSafeTarget(settings(), "Project Tracker/Dashboard.txt"), /the dashboard is/);
+		assert.throws(() => assertSafeTarget(settings(), "Gitdeck/Dashboard.txt"), /the dashboard is/);
 	});
 
 	it("has no folder to escape when the root is chosen", () => {
@@ -130,7 +130,7 @@ describe("renderProjectsSection", () => {
 	it("holds an aliased link to a path with a space inside one cell of an eight-cell row", () => {
 		// The table parser sees the line before the wikilink parser sees the link, so the row
 		// has to be eight cells first and a link second. Both come out of the same string.
-		const text = renderProjectsSection([project({ notePath: "private/Project Tracker/web.md" })], NOW);
+		const text = renderProjectsSection([project({ notePath: "private/Gitdeck/web.md" })], NOW);
 		const lines = text.split("\n").filter((line) => line.startsWith("|"));
 		const header = cells(lines[0]);
 		const row = cells(lines[2]);
@@ -138,7 +138,7 @@ describe("renderProjectsSection", () => {
 		assert.equal(header.length, 8, "the header is eight columns");
 		assert.equal(header[6], "Note");
 		assert.equal(row.length, 8, "the row is eight cells");
-		assert.equal(row[6], "[[private/Project Tracker/web.md|web]]");
+		assert.equal(row[6], "[[private/Gitdeck/web.md|web]]");
 	});
 
 	it("says no note rather than rendering a dead link", () => {

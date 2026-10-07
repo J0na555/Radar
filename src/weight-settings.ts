@@ -32,7 +32,7 @@ export function renderWeightSettings(
 ): void {
 	// A container of its own, because Reset redraws and the caller only clears the
 	// settings tab as a whole.
-	const host = container.createDiv({ cls: "pt-weights" });
+	const host = container.createDiv({ cls: "gd-weights" });
 
 	const draw = (): void => {
 		host.empty();

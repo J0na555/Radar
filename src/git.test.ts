@@ -117,7 +117,7 @@ function tmpDir(prefix: string): string {
 
 /** Run git and fail the test loudly if it did not work. */
 function runGit(cwd: string, args: string[]): void {
-	const res = spawnSync("git", ["-c", "user.email=pt@example.com", "-c", "user.name=Project Tracker", ...args], {
+	const res = spawnSync("git", ["-c", "user.email=pt@example.com", "-c", "user.name=Gitdeck", ...args], {
 		cwd,
 		encoding: "utf8",
 	});
@@ -156,7 +156,7 @@ function cloneWithOrigin(prefix: string): { repo: string; origin: string } {
 describe("readRepoFacts health probes", () => {
 	it("counts a stash", () => {
 		// The one real case on this machine, reproduced for real rather than faked.
-		const dir = repoWithCommit("pt-stash-");
+		const dir = repoWithCommit("gd-stash-");
 		fs.writeFileSync(path.join(dir, "work.txt"), "half a feature\n");
 		runGit(dir, ["add", "work.txt"]);
 		runGit(dir, ["stash", "push", "-q", "-m", "half a feature"]);
@@ -165,14 +165,14 @@ describe("readRepoFacts health probes", () => {
 	});
 
 	it("reports zero stashes as zero, not as unknown", () => {
-		const dir = repoWithCommit("pt-no-stash-");
+		const dir = repoWithCommit("gd-no-stash-");
 		const facts = readRepoFacts(dir, dir);
 		assert.equal(facts.stashCount, 0);
 		assert.notEqual(facts.stashCount, null);
 	});
 
 	it("counts commits the upstream does not have", () => {
-		const { repo } = cloneWithOrigin("pt-unpushed-");
+		const { repo } = cloneWithOrigin("gd-unpushed-");
 		assert.equal(readRepoFacts(repo, repo).unpushedCount, 0);
 
 		runGit(repo, ["commit", "-q", "--allow-empty", "-m", "local only"]);
@@ -190,7 +190,7 @@ describe("readRepoFacts health probes", () => {
 	it("reports no upstream as unknown rather than as unpushed", () => {
 		// Every repo that was never pushed has no upstream. Calling that "every
 		// commit is unpushed" would fire the badge on all of them.
-		const dir = repoWithCommit("pt-no-upstream-");
+		const dir = repoWithCommit("gd-no-upstream-");
 		runGit(dir, ["commit", "-q", "--allow-empty", "-m", "local only"]);
 
 		const facts = readRepoFacts(dir, dir);
@@ -199,7 +199,7 @@ describe("readRepoFacts health probes", () => {
 	});
 
 	it("leaves both probes unknown when git cannot read the repo at all", () => {
-		const dir = tmpDir("pt-unreadable-");
+		const dir = tmpDir("gd-unreadable-");
 		const facts = readRepoFacts(dir, dir);
 		assert.equal(facts.gitReadable, false);
 		assert.equal(facts.stashCount, null);
@@ -212,7 +212,7 @@ describe("readRepoFacts on a repo with no commits", () => {
 		// The load-bearing case for the note writer: a fresh `git init` has no
 		// commit date, and "no commits" has to be distinguishable from "git failed",
 		// otherwise an old date on disk can never be cleared.
-		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pt-no-commits-"));
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gd-no-commits-"));
 		try {
 			const init = spawnSync("git", ["init", "-q", dir], { encoding: "utf8" });
 			assert.equal(init.status, 0, `git init failed: ${init.stderr}`);
@@ -230,7 +230,7 @@ describe("readRepoFacts on a repo with no commits", () => {
 	it("reports an unreadable repo as not readable", () => {
 		// No .git at all: gitReadable false, so the note writer leaves the note alone
 		// rather than recording zeros for facts it could not read.
-		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pt-not-a-repo-"));
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gd-not-a-repo-"));
 		try {
 			const facts = readRepoFacts(dir, dir);
 			assert.equal(facts.gitReadable, false);

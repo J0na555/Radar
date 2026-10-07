@@ -15,7 +15,7 @@ import type { PluginFolder } from "./log-writer.ts";
  */
 function fakePlugin(adapter: unknown = { getFullPath: (p: string) => p }): PluginFolder {
 	return {
-		manifest: { dir: "project-tracker" },
+		manifest: { dir: "gitdeck" },
 		app: { vault: { configDir: "/vault/.obsidian", adapter } },
 	};
 }
@@ -25,7 +25,7 @@ describe("resolvePluginFolderPath", () => {
 		const plugin = fakePlugin();
 		assert.equal(
 			resolvePluginFolderPath(plugin, "errors.log"),
-			"/vault/.obsidian/plugins/project-tracker/errors.log",
+			"/vault/.obsidian/plugins/gitdeck/errors.log",
 		);
 	});
 
@@ -50,7 +50,7 @@ describe("LogWriter", () => {
 	let file = "";
 
 	beforeEach(() => {
-		dir = mkdtempSync(path.join(tmpdir(), "pt-log-"));
+		dir = mkdtempSync(path.join(tmpdir(), "gd-log-"));
 		file = path.join(dir, "errors.log");
 	});
 
@@ -140,7 +140,7 @@ describe("LogWriter", () => {
 		const lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
 		// Every line after the trim marker is a complete entry, matched by pattern.
 		for (const line of lines) {
-			assert.match(line, /^(--- Project Tracker log trimmed|line-\d+ z+)/);
+			assert.match(line, /^(--- Gitdeck log trimmed|line-\d+ z+)/);
 		}
 		assert.ok(lines.length > 1, "the trim must leave something readable behind");
 	});
@@ -187,7 +187,7 @@ describe("LogWriter", () => {
 		// char, so the file has to be valid UTF-8 with no partial glyph.
 		assert.doesNotMatch(contents, /\uFFFD/);
 		for (const line of contents.split("\n").filter(Boolean)) {
-			assert.match(line, /^(--- Project Tracker log trimmed|entry-\d+ (åäö)+)/);
+			assert.match(line, /^(--- Gitdeck log trimmed|entry-\d+ (åäö)+)/);
 		}
 	});
 
@@ -209,7 +209,7 @@ describe("ErrorLog", () => {
 	let file = "";
 
 	beforeEach(() => {
-		dir = mkdtempSync(path.join(tmpdir(), "pt-errors-"));
+		dir = mkdtempSync(path.join(tmpdir(), "gd-errors-"));
 		file = path.join(dir, "errors.log");
 	});
 
@@ -242,7 +242,7 @@ describe("ErrorLog", () => {
 		// name the notice gives the user, and whether the bytes landed.
 		assert.equal(
 			resolvePluginFolderPath(fakePlugin({ getFullPath: (p: string) => p }), ErrorLog.FILE_NAME),
-			"/vault/.obsidian/plugins/project-tracker/errors.log",
+			"/vault/.obsidian/plugins/gitdeck/errors.log",
 		);
 	});
 

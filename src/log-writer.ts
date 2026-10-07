@@ -142,7 +142,7 @@ export class LogWriter {
 		}
 		if (size + incoming <= this.maxBytes) return;
 
-		const header = `--- Project Tracker log trimmed at ${new Date().toISOString()}; older lines above were removed ---\n`;
+		const header = `--- Gitdeck log trimmed at ${new Date().toISOString()}; older lines above were removed ---\n`;
 		const keep = this.maxBytes - incoming - header.length;
 		if (keep <= 0) {
 			// A cap so small the incoming entry nearly fills it alone. The entry is worth more
@@ -212,7 +212,7 @@ export class ErrorLog {
 	 */
 	get whereSentence(): string {
 		return this.writer.written
-			? `Details in ${ErrorLog.FILE_NAME}, in the Project Tracker plugin folder.`
+			? `Details in ${ErrorLog.FILE_NAME}, in the Gitdeck plugin folder.`
 			: `${ErrorLog.FILE_NAME} could not be written, so this is only recorded in the developer console.`;
 	}
 

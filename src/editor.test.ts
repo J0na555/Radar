@@ -112,21 +112,21 @@ describe("revealCommand", () => {
 
 describe("isReadableRepo", () => {
 	it("accepts a real git repository", () => {
-		assert.equal(isReadableRepo(gitRepo("pt-readable-")), true);
+		assert.equal(isReadableRepo(gitRepo("gd-readable-")), true);
 	});
 
 	it("refuses a directory with no git in it", () => {
-		assert.equal(isReadableRepo(tmp("pt-not-a-repo-")), false);
+		assert.equal(isReadableRepo(tmp("gd-not-a-repo-")), false);
 	});
 
 	it("refuses a path that is not there", () => {
-		assert.equal(isReadableRepo(path.join(os.tmpdir(), "pt-no-such-dir-xyz")), false);
+		assert.equal(isReadableRepo(path.join(os.tmpdir(), "gd-no-such-dir-xyz")), false);
 	});
 });
 
 describe("openRepoFolder refusals", () => {
 	it("names the project when it is not a git repository, and launches nothing", () => {
-		const dir = tmp("pt-open-refuse-");
+		const dir = tmp("gd-open-refuse-");
 		const launched: string[] = [];
 		const result = openRepoFolder(facts(dir), "code", (message) => launched.push(message));
 		assert.equal(result.ok, false);
@@ -142,7 +142,7 @@ describe("openRepoFolder refusals", () => {
 	});
 
 	it("reveals the folder instead of failing when the setting is empty", () => {
-		const dir = gitRepo("pt-open-reveal-");
+		const dir = gitRepo("gd-open-reveal-");
 		const result = openRepoFolder(facts(dir), "  ", () => {});
 		assert.deepEqual(result, { ok: true, mode: "reveal", command: revealCommand(dir).command });
 	});
@@ -155,7 +155,7 @@ describe("openRepoFolder launching", () => {
 	const skip = process.platform === "win32" ? "needs a POSIX shell to fake an editor" : false;
 
 	it("passes the repo folder as one argument, with no shell in between", { skip }, async () => {
-		const dir = tmp("pt-open-argv-");
+		const dir = tmp("gd-open-argv-");
 		const repo = path.join(dir, "repo with a space");
 		fs.mkdirSync(repo);
 		spawnSync("git", ["init", "-q", repo], { encoding: "utf8" });
@@ -181,7 +181,7 @@ describe("openRepoFolder launching", () => {
 	});
 
 	it("returns while the editor is still running", { skip }, async () => {
-		const dir = tmp("pt-open-nonblocking-");
+		const dir = tmp("gd-open-nonblocking-");
 		const repo = gitRepoIn(dir, "repo");
 		const editor = recordingEditor(dir, 4);
 
@@ -204,9 +204,9 @@ describe("openRepoFolder launching", () => {
 	});
 
 	it("reports a missing binary instead of failing silently", { skip }, async () => {
-		const repo = gitRepo("pt-open-missing-");
+		const repo = gitRepo("gd-open-missing-");
 		const messages: string[] = [];
-		const result = openRepoFolder(facts(repo), "pt-no-such-editor-binary", (message) => messages.push(message));
+		const result = openRepoFolder(facts(repo), "gd-no-such-editor-binary", (message) => messages.push(message));
 		assert.equal(result.ok, true);
 		assert.ok(
 			await waitFor(() => messages.length > 0),

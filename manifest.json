@@ -1,6 +1,6 @@
 {
-	"id": "project-tracker",
-	"name": "Project Tracker",
+	"id": "gitdeck",
+	"name": "Gitdeck",
 	"version": "0.1.0",
 	"minAppVersion": "1.5.0",
 	"description": "Dashboard that ranks your local git projects by what you are actually working on.",

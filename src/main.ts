@@ -65,9 +65,9 @@ import {
 import { WriteChain } from "./write-chain";
 import { renderWeightSettings } from "./weight-settings";
 import {
-	ICON_PROJECT_TRACKER,
-	ProjectTrackerView,
-	VIEW_TYPE_PROJECT_TRACKER,
+	ICON_GITDECK,
+	GitdeckView,
+	VIEW_TYPE_GITDECK,
 } from "./view";
 
 const DEFAULT_SETTINGS: PluginSettings = {
@@ -76,7 +76,7 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	// generated machine output nobody was meant to read; this one is a table of projects with
 	// links in it, which is a note a person may want to link to. Existing installs keep whatever
 	// they had, because their 45 notes are in it.
-	notesFolder: "Project Tracker",
+	notesFolder: "Gitdeck",
 	showDormant: false,
 	// The "why this score" line doubles the height of the list, so it is a toggle
 	// rather than a default. The tooltip on the score needs no permission.
@@ -98,7 +98,7 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	state: emptyMachineState(),
 };
 
-const RIBBON_TITLE = "Open Project Tracker";
+const RIBBON_TITLE = "Open Gitdeck";
 
 /**
  * Binaries found on the author's machine, listed as copyable examples. A literal list, not
@@ -117,7 +117,7 @@ const TERMINAL_EDITOR_EXAMPLE = "kitty --single-instance --directory";
 /** How old a cached probe pass may be before load re-probes, in days. */
 const DETECTION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-export default class ProjectTrackerPlugin extends Plugin {
+export default class GitdeckPlugin extends Plugin {
 	settings: PluginSettings = { ...DEFAULT_SETTINGS };
 	private projects: Project[] = [];
 	private errorLog: ErrorLog | null = null;
@@ -176,18 +176,18 @@ export default class ProjectTrackerPlugin extends Plugin {
 		}
 
 		this.guard(log, "registerView", () => {
-			this.registerView(VIEW_TYPE_PROJECT_TRACKER, (leaf) => new ProjectTrackerView(leaf, this));
+			this.registerView(VIEW_TYPE_GITDECK, (leaf) => new GitdeckView(leaf, this));
 		});
 
 		this.guard(log, "addRibbonIcon", () => {
-			this.addRibbonIcon(ICON_PROJECT_TRACKER, RIBBON_TITLE, () => {
+			this.addRibbonIcon(ICON_GITDECK, RIBBON_TITLE, () => {
 				void this.activateView();
 			});
 		});
 
-		this.guard(log, "addCommand:open-project-tracker", () => {
+		this.guard(log, "addCommand:open-gitdeck", () => {
 			this.addCommand({
-				id: "open-project-tracker",
+				id: "open-gitdeck",
 				name: RIBBON_TITLE,
 				callback: () => void this.activateView(),
 			});
@@ -200,7 +200,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 				callback: () => {
 					void (async () => {
 						const projects = await this.refresh();
-						new Notice(`Project Tracker: ${projects.length} repositories scanned.`);
+						new Notice(`Gitdeck: ${projects.length} repositories scanned.`);
 					})();
 				},
 			});
@@ -219,7 +219,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 		});
 
 		this.guard(log, "addSettingTab", () => {
-			this.addSettingTab(new ProjectTrackerSettingTab(this.app, this));
+			this.addSettingTab(new GitdeckSettingTab(this.app, this));
 		});
 
 		// Probing spawns child processes, so it is not on onload's critical path: a stale cache
@@ -274,7 +274,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 	 */
 	private fail(project: string, provider: string, message: string): null {
 		this.errors().record({ provider, project, message });
-		new Notice(`Project Tracker: no summary written for ${project}. ${message} ${this.errors().whereSentence}`, 0);
+		new Notice(`Gitdeck: no summary written for ${project}. ${message} ${this.errors().whereSentence}`, 0);
 		return null;
 	}
 
@@ -401,7 +401,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 
 		if (imported > 0) {
 			new Notice(
-				`Project Tracker: moved ${imported} AI summar${imported === 1 ? "y" : "ies"} into ${dashboardPath(this.settings)}. The old notes are untouched, so delete them when the dashboard looks right.`,
+				`Gitdeck: moved ${imported} AI summar${imported === 1 ? "y" : "ies"} into ${dashboardPath(this.settings)}. The old notes are untouched, so delete them when the dashboard looks right.`,
 				0,
 			);
 		}
@@ -410,7 +410,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 				.map((entry) => `${entry.folder} (${entry.count})`)
 				.join(", ");
 			new Notice(
-				`Project Tracker: ${files.length - imported} of ${files.length} old summary notes were left alone. Nothing was deleted, but they are not in the dashboard either. Most are in ${where}.`,
+				`Gitdeck: ${files.length - imported} of ${files.length} old summary notes were left alone. Nothing was deleted, but they are not in the dashboard either. Most are in ${where}.`,
 				0,
 			);
 		}
@@ -438,8 +438,8 @@ export default class ProjectTrackerPlugin extends Plugin {
 		const selected = this.currentProvider();
 		new Notice(
 			selected
-				? `Project Tracker: ${selected} works and will be used. ${summarize(probes)}`
-				: `Project Tracker: no working provider CLI found. ${summarize(probes)} ${this.errors().whereSentence}`,
+				? `Gitdeck: ${selected} works and will be used. ${summarize(probes)}`
+				: `Gitdeck: no working provider CLI found. ${summarize(probes)} ${this.errors().whereSentence}`,
 			0,
 		);
 	}
@@ -454,7 +454,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 		this.settings.detection = detection;
 		void this.saveSettings().catch((error) => {
 			this.settings.detection = { checkedAt: 0, probes: [], selected: null };
-			new Notice(`Project Tracker: could not save the provider detection (${String(error)})`);
+			new Notice(`Gitdeck: could not save the provider detection (${String(error)})`);
 		});
 	}
 
@@ -475,14 +475,14 @@ export default class ProjectTrackerPlugin extends Plugin {
 
 	/** Surface a panel, creating its leaf on first open. */
 	async activateView(): Promise<void> {
-		const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_PROJECT_TRACKER);
+		const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_GITDECK);
 		if (existing.length > 0) {
 			await this.app.workspace.revealLeaf(existing[0]);
 			return;
 		}
 		const leaf = this.app.workspace.getRightLeaf(false);
 		if (!leaf) return;
-		await leaf.setViewState({ type: VIEW_TYPE_PROJECT_TRACKER, active: true });
+		await leaf.setViewState({ type: VIEW_TYPE_GITDECK, active: true });
 		await this.app.workspace.revealLeaf(leaf);
 	}
 
@@ -525,7 +525,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 		} catch (error) {
 			if (had) this.settings.state.pins[name] = before;
 			else delete this.settings.state.pins[name];
-			new Notice(`Project Tracker: could not save the pin for ${name} (${String(error)}).`);
+			new Notice(`Gitdeck: could not save the pin for ${name} (${String(error)}).`);
 			return false;
 		}
 	}
@@ -662,7 +662,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 	async openRepoFolder(project: Project): Promise<void> {
 		const name = project.facts.name;
 		const complain = (message: string): void => {
-			new Notice(`Project Tracker: ${message}`, 0);
+			new Notice(`Gitdeck: ${message}`, 0);
 		};
 
 		const result = openRepoFolder(project.facts, this.settings.editorCommand, complain);
@@ -673,8 +673,8 @@ export default class ProjectTrackerPlugin extends Plugin {
 
 		new Notice(
 			result.mode === "editor"
-				? `Project Tracker: opened ${name} in ${result.command}.`
-				: `Project Tracker: revealed ${name} in the file manager.`,
+				? `Gitdeck: opened ${name} in ${result.command}.`
+				: `Gitdeck: revealed ${name} in the file manager.`,
 		);
 	}
 
@@ -699,7 +699,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 			return this.fail(
 				name,
 				"none",
-				"No AI provider CLI is usable. Open the Project Tracker settings and retest; gemini needs an auth method, which `--version` does not check.",
+				"No AI provider CLI is usable. Open the Gitdeck settings and retest; gemini needs an auth method, which `--version` does not check.",
 			);
 		}
 
@@ -707,7 +707,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 		const prompt = buildPrompt(context);
 		const stamp = computeStamp(project.facts, Date.now(), context.head);
 
-		new Notice(`Project Tracker: asking ${provider} about ${name}...`, 0);
+		new Notice(`Gitdeck: asking ${provider} about ${name}...`, 0);
 		const result = await runProvider(provider, prompt, {
 			cwd: project.facts.path,
 			timeoutMs: this.settings.timeoutSeconds * 1000,
@@ -754,7 +754,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 		} catch (error) {
 			const message = `The summary was written, but its freshness could not be saved, so the panel will not show it as current until the next one is generated (${String(error)}).`;
 			this.errors().record({ provider, project: name, message });
-			new Notice(`Project Tracker: ${name} summary written. ${message} ${this.errors().whereSentence}`, 0);
+			new Notice(`Gitdeck: ${name} summary written. ${message} ${this.errors().whereSentence}`, 0);
 		}
 		const state: SummaryState = {
 			generatedAt: stamp.generatedAt,
@@ -768,7 +768,7 @@ export default class ProjectTrackerPlugin extends Plugin {
 
 		const dirtyNote = stamp.dirtyCount > 0 ? ` (${stamp.dirtyCount} uncommitted, not in any commit)` : "";
 		new Notice(
-			`Project Tracker: ${existed ? "regenerated" : "wrote"} ${name} summary from ${stamp.commit ?? "no commit"}${dirtyNote}.`,
+			`Gitdeck: ${existed ? "regenerated" : "wrote"} ${name} summary from ${stamp.commit ?? "no commit"}${dirtyNote}.`,
 		);
 
 		// The repo may have moved while the CLI ran, so recompute rather than reporting
@@ -858,10 +858,10 @@ function detailFor(id: ProviderId, probe: ProviderProbe | undefined): string {
 	}
 }
 
-class ProjectTrackerSettingTab extends PluginSettingTab {
+class GitdeckSettingTab extends PluginSettingTab {
 	constructor(
 		app: App,
-		private readonly plugin: ProjectTrackerPlugin,
+		private readonly plugin: GitdeckPlugin,
 	) {
 		super(app, plugin);
 	}
@@ -870,7 +870,7 @@ class ProjectTrackerSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "Project Tracker" });
+		containerEl.createEl("h2", { text: "Gitdeck" });
 
 		new Setting(containerEl)
 			.setName("Scan root")
@@ -970,7 +970,7 @@ class ProjectTrackerSettingTab extends PluginSettingTab {
 		// purpose. Version alone is what produced the trap: gemini passes `--version` with
 		// exit 0 on a machine where it cannot authenticate, so a settings tab reporting
 		// only the version reads as fine right up until a summary fails.
-		const detectionNote = containerEl.createDiv({ cls: "pt-probe" });
+		const detectionNote = containerEl.createDiv({ cls: "gd-probe" });
 		const probedAt = checkedAt === 0 ? "never" : new Date(checkedAt).toLocaleString();
 		detectionNote.setText(
 			`Test calls last run ${probedAt}. Using: ${active ?? "nothing, no CLI answered"}. ${manual ? `${manual} is your manual choice.` : ""}`,
@@ -979,19 +979,19 @@ class ProjectTrackerSettingTab extends PluginSettingTab {
 
 		for (const id of PROVIDER_IDS) {
 			const probe = probes.find((entry) => entry.provider === id);
-			const row = containerEl.createDiv({ cls: `pt-probe-row is-${probe?.state ?? "absent"}` });
+			const row = containerEl.createDiv({ cls: `gd-probe-row is-${probe?.state ?? "absent"}` });
 
-			const state = row.createSpan({ cls: "pt-probe-state" });
+			const state = row.createSpan({ cls: "gd-probe-state" });
 			state.setText(probe?.state ?? "unknown");
 
-			const detail = row.createSpan({ cls: "pt-probe-detail" });
+			const detail = row.createSpan({ cls: "gd-probe-detail" });
 			detail.setText(detailFor(id, probe));
 
-			const version = row.createSpan({ cls: "pt-probe-version" });
+			const version = row.createSpan({ cls: "gd-probe-version" });
 			version.setText(`installed: ${probeProvider(id).detail}`);
 		}
 
-		const logNote = containerEl.createDiv({ cls: "pt-probe" });
+		const logNote = containerEl.createDiv({ cls: "gd-probe" });
 		logNote.setText(`Generation failures are recorded to ${this.plugin.errorLogSentence}`);
 
 		new Setting(containerEl)
@@ -1041,7 +1041,7 @@ class ProjectTrackerSettingTab extends PluginSettingTab {
 
 		containerEl.createEl("h3", { text: "Score weights" });
 
-		const weightNote = containerEl.createDiv({ cls: "pt-weight-note" });
+		const weightNote = containerEl.createDiv({ cls: "gd-weight-note" });
 		weightNote.setText(
 			"The score is the sum of these. They were chosen by feel, so change anything that reads wrong. Takes effect on the next scan. The two day counts are independent: make the recent window wider than the stale one and the stale band is simply never reached, which is not an error and not worth warning you about.",
 		);

@@ -32,7 +32,7 @@ export async function openProjectNote(app: App, project: Project | null): Promis
 		return;
 	}
 	new Notice(
-		`Project Tracker: no note for ${project.facts.name}. Write one named ${project.facts.name}.md anywhere in the vault, or put "tracked: ${project.facts.name}" in a note's frontmatter, and it will be linked from the dashboard.`,
+		`Gitdeck: no note for ${project.facts.name}. Write one named ${project.facts.name}.md anywhere in the vault, or put "tracked: ${project.facts.name}" in a note's frontmatter, and it will be linked from the dashboard.`,
 	);
 }
 
@@ -55,6 +55,6 @@ export async function openSummaryNote(app: App, project: Project, target: string
 		return;
 	}
 	new Notice(
-		`Project Tracker: ${target} is not in the vault. It is the dashboard, which the plugin creates on the next scan; generate the summary again after a refresh.`,
+		`Gitdeck: ${target} is not in the vault. It is the dashboard, which the plugin creates on the next scan; generate the summary again after a refresh.`,
 	);
 }

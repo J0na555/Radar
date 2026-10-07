@@ -22,7 +22,7 @@ import type { PluginSettings, RepoFacts } from "./types.ts";
  * are the cases a hand-written fixture gets wrong.
  */
 function makeRepo(script: (dir: string) => void): string {
-	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pt-ctx-")));
+	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "gd-ctx-")));
 	const git = (...args: string[]) => {
 		const res = spawnSync("git", args, { cwd: dir, encoding: "utf8" });
 		assert.equal(res.status, 0, `git ${args.join(" ")} failed: ${res.stderr}`);

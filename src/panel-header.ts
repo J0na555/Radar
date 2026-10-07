@@ -78,16 +78,16 @@ export class PanelHeader {
 		this.doc = doc;
 
 		const header = doc.createElement("div");
-		header.className = "pt-header";
+		header.className = "gd-header";
 		host.appendChild(header);
 
 		const title = doc.createElement("div");
-		title.className = "pt-title";
+		title.className = "gd-title";
 		title.textContent = "Projects";
 		header.appendChild(title);
 
 		const controls = doc.createElement("div");
-		controls.className = "pt-controls";
+		controls.className = "gd-controls";
 		header.appendChild(controls);
 
 		this.refreshEl = button(doc, "Refresh", "Rescan every repository under the scan root", () => {
@@ -121,7 +121,7 @@ export class PanelHeader {
 		// the end even when the text is identical.
 		this.searchEl = doc.createElement("input");
 		this.searchEl.type = "search";
-		this.searchEl.className = "pt-search";
+		this.searchEl.className = "gd-search";
 		this.searchEl.placeholder = "Filter projects, or press / to focus";
 		this.searchEl.setAttribute("aria-label", "Filter projects by name");
 		this.searchEl.addEventListener("input", () => actions.onQueryChange(this.searchEl.value));
@@ -152,27 +152,27 @@ export class PanelHeader {
 		// can be dropped when it has nothing to say: a line carrying the hints would have
 		// to stay even on a panel where the filter is explaining nothing.
 		const root = doc.createElement("div");
-		root.className = "pt-root";
+		root.className = "gd-root";
 		host.appendChild(root);
 
 		this.rootPathEl = doc.createElement("span");
-		this.rootPathEl.className = "pt-root-path";
+		this.rootPathEl.className = "gd-root-path";
 		root.appendChild(this.rootPathEl);
 
 		const hints = doc.createElement("span");
-		hints.className = "pt-keys";
+		hints.className = "gd-keys";
 		hints.textContent = keyHints();
 		root.appendChild(hints);
 
 		// Its own line, and `hidden` until it has something to say, which is most of the
 		// time: the panel showing everything is the common case.
 		this.statusEl = doc.createElement("div");
-		this.statusEl.className = "pt-status";
+		this.statusEl.className = "gd-status";
 		this.statusEl.hidden = true;
 		host.appendChild(this.statusEl);
 
 		this.rowsEl = doc.createElement("div");
-		this.rowsEl.className = "pt-body";
+		this.rowsEl.className = "gd-body";
 		host.appendChild(this.rowsEl);
 	}
 
@@ -233,7 +233,7 @@ export class PanelHeader {
 function button(doc: Document, label: string, describe: string, onClick: () => void): HTMLButtonElement {
 	const el = doc.createElement("button");
 	el.type = "button";
-	el.className = "pt-btn";
+	el.className = "gd-btn";
 	el.textContent = label;
 	el.setAttribute("aria-label", describe);
 	el.setAttribute("title", describe);

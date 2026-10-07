@@ -363,11 +363,11 @@ export function describeFailure(label: string, error: unknown): string {
 	// The most likely failure, so the most actionable wording: the fix is to install
 	// something or change the setting, and neither is guessable from ENOENT.
 	if (err.code === "ENOENT") {
-		return `${label} not found on PATH. Install it, or pick a different provider in the Project Tracker settings.`;
+		return `${label} not found on PATH. Install it, or pick a different provider in the Gitdeck settings.`;
 	}
 
 	if (err.killed || err.signal === "SIGTERM" || err.signal === "SIGKILL") {
-		return `${label} timed out and was killed. Raise the timeout in the Project Tracker settings, or try a smaller project.`;
+		return `${label} timed out and was killed. Raise the timeout in the Gitdeck settings, or try a smaller project.`;
 	}
 
 	const stderr = (err.stderr ?? "").trim();

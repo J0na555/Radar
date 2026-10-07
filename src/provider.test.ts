@@ -332,7 +332,7 @@ describe("describeFailure", () => {
 	it("says a missing cli is not on PATH, by name", () => {
 		const message = describeFailure("gemini", Object.assign(new Error("spawn gemini ENOENT"), { code: "ENOENT" }));
 		assert.match(message, /gemini not found on PATH/);
-		assert.match(message, /Project Tracker settings/);
+		assert.match(message, /Gitdeck settings/);
 	});
 
 	it("names the actual provider when it is codex or opencode", () => {
@@ -343,7 +343,7 @@ describe("describeFailure", () => {
 	it("reports a killed process as a timeout, with the setting to change", () => {
 		const message = describeFailure("gemini", { killed: true, signal: "SIGTERM", code: null });
 		assert.match(message, /timed out/);
-		assert.match(message, /timeout in the Project Tracker settings/);
+		assert.match(message, /timeout in the Gitdeck settings/);
 	});
 
 	it("includes the exit code and stderr for a crash", () => {
@@ -378,9 +378,9 @@ describe("runCommand", () => {
 	});
 
 	it("reports a missing binary by name instead of throwing", async () => {
-		const result = await runCommand("pt-definitely-not-a-real-binary", ["-p", "x"], options);
+		const result = await runCommand("gd-definitely-not-a-real-binary", ["-p", "x"], options);
 		assert.equal(result.ok, false);
-		assert.match(result.ok === false ? result.error : "", /pt-definitely-not-a-real-binary not found on PATH/);
+		assert.match(result.ok === false ? result.error : "", /gd-definitely-not-a-real-binary not found on PATH/);
 	});
 
 	it("reports a non-zero exit with its stderr", async () => {
@@ -477,7 +477,7 @@ describe("runProvider surfaces the CLI's own error", () => {
 	 * `gemini` silently leaves `codex` calling the real codex.
 	 */
 	function stubProvider(provider: ProviderId, script: string, status: number): () => void {
-		const dir = mkdtempSync(path.join(tmpdir(), "pt-stub-"));
+		const dir = mkdtempSync(path.join(tmpdir(), "gd-stub-"));
 		const bin = path.join(dir, provider);
 		writeFileSync(bin, `#!/bin/sh\n${script}\nexit ${status}\n`, { mode: 0o755 });
 		const previous = process.env.PATH;
@@ -662,7 +662,7 @@ async function sandboxAsync(
 
 /** A directory holding the stubs plus the few real programs they need. */
 function buildSandbox(stubs: Partial<Record<ProviderId, string>>): string {
-	const dir = mkdtempSync(path.join(tmpdir(), "pt-sandbox-"));
+	const dir = mkdtempSync(path.join(tmpdir(), "gd-sandbox-"));
 	for (const tool of ["sh", "cat", "sleep"]) {
 		const real = (process.env.PATH ?? "")
 			.split(path.delimiter)
@@ -900,25 +900,25 @@ exit 0`,
 		// The stub records its own argv, so this asserts the argv the plugin really
 		// built rather than a re-derivation of it.
 		sandbox(
-			{ gemini: `printf '%s\\n' "$@" > /tmp/pt-args-gemini.txt\nprintf '%s' '{"response":"{}"}'` },
+			{ gemini: `printf '%s\\n' "$@" > /tmp/gd-args-gemini.txt\nprintf '%s' '{"response":"{}"}'` },
 			() => {
 				probeCapability("gemini", { timeoutMs: 5_000 });
 			},
 		);
-		const args = readFileSync("/tmp/pt-args-gemini.txt", "utf8").split("\n").filter(Boolean);
-		rmSync("/tmp/pt-args-gemini.txt", { force: true });
+		const args = readFileSync("/tmp/gd-args-gemini.txt", "utf8").split("\n").filter(Boolean);
+		rmSync("/tmp/gd-args-gemini.txt", { force: true });
 		assert.deepEqual(args, ["-p", PROBE_PROMPT, "-o", "json"]);
 	});
 
 	it("adds codex's repo-check bypass because the probe runs outside a repository", () => {
 		sandbox(
-			{ codex: `printf '%s\\n' "$@" > /tmp/pt-args-codex.txt\necho not-in-a-repo >&2\nexit 1` },
+			{ codex: `printf '%s\\n' "$@" > /tmp/gd-args-codex.txt\necho not-in-a-repo >&2\nexit 1` },
 			() => {
 				probeCapability("codex", { timeoutMs: 5_000 });
 			},
 		);
-		const args = readFileSync("/tmp/pt-args-codex.txt", "utf8").split("\n").filter(Boolean);
-		rmSync("/tmp/pt-args-codex.txt", { force: true });
+		const args = readFileSync("/tmp/gd-args-codex.txt", "utf8").split("\n").filter(Boolean);
+		rmSync("/tmp/gd-args-codex.txt", { force: true });
 		assert.deepEqual(args, ["exec", PROBE_PROMPT, "--json", "--skip-git-repo-check"]);
 	});
 
@@ -926,11 +926,11 @@ exit 0`,
 		// A probe that ran inside a user's repo would be one model call with that
 		// repo's AGENTS.md and CLAUDE.md in context. The cwd is asserted by the stub
 		// recording where it was started.
-		sandbox({ gemini: "pwd > /tmp/pt-cwd.txt\nprintf '%s' '{\"response\":\"{}\"}'" }, () => {
+		sandbox({ gemini: "pwd > /tmp/gd-cwd.txt\nprintf '%s' '{\"response\":\"{}\"}'" }, () => {
 			probeCapability("gemini", { timeoutMs: 5_000 });
 		});
-		const cwd = readFileSync("/tmp/pt-cwd.txt", "utf8").trim();
-		rmSync("/tmp/pt-cwd.txt", { force: true });
+		const cwd = readFileSync("/tmp/gd-cwd.txt", "utf8").trim();
+		rmSync("/tmp/gd-cwd.txt", { force: true });
 		assert.equal(path.resolve(cwd), path.resolve(tmpdir()));
 	});
 

@@ -3,7 +3,7 @@ import {spawnSync} from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pt-ctx-')));
+const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'gd-ctx-')));
 spawnSync('git',['init','-q'],{cwd:dir});
 spawnSync('git',['config','user.email','test@example.com'],{cwd:dir});
 spawnSync('git',['config','user.name','Test'],{cwd:dir});

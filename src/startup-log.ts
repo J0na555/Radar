@@ -26,7 +26,7 @@ export class StartupLog {
 	constructor(plugin: Plugin) {
 		this.writer = new LogWriter(resolvePluginFolderPath(plugin, LOG_NAME));
 		// Start a fresh log so it always describes the current session.
-		this.writer.start(`--- Project Tracker startup ${new Date().toISOString()} ---`);
+		this.writer.start(`--- Gitdeck startup ${new Date().toISOString()} ---`);
 	}
 
 	/** Record a step that succeeded. */
@@ -41,7 +41,7 @@ export class StartupLog {
 	fail(step: string, error: unknown): void {
 		this.failures.push(step);
 		const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
-		console.error(`Project Tracker: ${step} failed during onload`, error);
+		console.error(`Gitdeck: ${step} failed during onload`, error);
 		this.writer.append(`FAIL  ${step}\n      ${detail.split("\n").join("\n      ")}`);
 	}
 
@@ -61,6 +61,6 @@ export class StartupLog {
 			: `${LOG_NAME} could not be written, so the stack trace is only in the developer console.`;
 		// Duration 0 keeps the notice up until the user dismisses it, which is the
 		// point: a load failure that scrolls away is the failure being reported.
-		new Notice(`Project Tracker loaded with errors in: ${names}. ${where}`, 0);
+		new Notice(`Gitdeck loaded with errors in: ${names}. ${where}`, 0);
 	}
 }

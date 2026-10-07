@@ -1,5 +1,5 @@
 {
-  "name": "obsidian-plugin",
+  "name": "gitdeck",
   "version": "0.1.0",
   "description": "Dashboard that tracks which of your local git projects you are actively working on.",
   "main": "main.js",

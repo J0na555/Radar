@@ -1,4 +1,4 @@
-.pt-header {
+.gd-header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -7,12 +7,12 @@
 	padding-bottom: 4px;
 }
 
-.pt-title {
+.gd-title {
 	font-weight: 600;
 	font-size: var(--font-ui-medium, 1em);
 }
 
-.pt-controls {
+.gd-controls {
 	display: flex;
 	gap: 4px;
 }
@@ -25,7 +25,7 @@
  * every keystroke. `flex: 1` inside the wrapped header means it takes the full
  * width on its own line and the controls stay put above it.
  */
-.pt-search {
+.gd-search {
 	flex: 1 1 100%;
 	min-width: 0;
 	font-size: var(--font-ui-smaller, 0.9em);
@@ -36,7 +36,7 @@
  * say. `hidden` is set from the header, so a panel showing everything spends no height
  * here at all: no line, no margins, nothing stacked under the scan root.
  */
-.pt-status {
+.gd-status {
 	font-size: var(--font-ui-smaller, 0.8em);
 	color: var(--text-muted);
 	overflow: hidden;
@@ -45,12 +45,12 @@
 	margin: 2px 0 4px;
 }
 
-.pt-status[hidden] {
+.gd-status[hidden] {
 	display: none;
 }
 
 /* The shortcuts, once, in the least prominent style available. */
-.pt-keys {
+.gd-keys {
 	flex-shrink: 0;
 	color: var(--text-faint);
 	font-size: 0.95em;
@@ -60,18 +60,18 @@
 @media (max-width: 400px) {
 	/* Narrow sidebar: the keys go, the counts stay. A filtered panel with no
 	   explanation of what was filtered is the failure this whole feature is about. */
-	.pt-keys {
+	.gd-keys {
 		display: none;
 	}
 }
 
-.pt-btn {
+.gd-btn {
 	font-size: var(--font-ui-smaller, 0.85em);
 	padding: 2px 8px;
 	cursor: pointer;
 }
 
-.pt-btn.is-on {
+.gd-btn.is-on {
 	background-color: var(--interactive-accent);
 	color: var(--text-on-accent);
 }
@@ -82,7 +82,7 @@
  * The path is the half that ellipsizes: an absolute path is long by nature and the hints
  * are short, fixed, and the only copy of the keyboard map the panel shows.
  */
-.pt-root {
+.gd-root {
 	display: flex;
 	align-items: baseline;
 	justify-content: space-between;
@@ -92,7 +92,7 @@
 	margin-bottom: 10px;
 }
 
-.pt-root-path {
+.gd-root-path {
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
@@ -100,7 +100,7 @@
 	white-space: nowrap;
 }
 
-.pt-group {
+.gd-group {
 	font-size: var(--font-ui-smaller, 0.8em);
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
@@ -108,7 +108,7 @@
 	margin: 14px 0 4px;
 }
 
-.pt-row {
+.gd-row {
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -117,7 +117,7 @@
 	border-left: 2px solid transparent;
 }
 
-.pt-row:hover {
+.gd-row:hover {
 	background-color: var(--background-modifier-hover);
 }
 
@@ -128,7 +128,7 @@
  * already lives on the left border of a row and selection must not be mistaken for
  * pinning. Both together, so it reads on a theme where either alone is too faint.
  */
-.pt-row.is-selected {
+.gd-row.is-selected {
 	background-color: var(--background-modifier-active-hover, var(--background-modifier-hover));
 	box-shadow: inset 0 0 0 1px var(--interactive-accent);
 }
@@ -139,28 +139,28 @@
  * Dimmed, not hidden. The status line says how many are like this, so a dimmed row
  * is explained rather than mysterious.
  */
-.pt-row.is-weak {
+.gd-row.is-weak {
 	opacity: 0.65;
 }
 
-.pt-row.is-selected.is-weak {
+.gd-row.is-selected.is-weak {
 	opacity: 0.85;
 }
 
-.pt-row.is-pinned {
+.gd-row.is-pinned {
 	border-left-color: var(--interactive-accent);
 }
 
-.pt-row.is-dormant {
+.gd-row.is-dormant {
 	opacity: 0.55;
 }
 
-.pt-main {
+.gd-main {
 	flex: 1;
 	min-width: 0;
 }
 
-.pt-name {
+.gd-name {
 	font-weight: 500;
 	cursor: pointer;
 	overflow: hidden;
@@ -168,25 +168,25 @@
 	white-space: nowrap;
 }
 
-.pt-name:hover {
+.gd-name:hover {
 	color: var(--text-accent);
 }
 
-.pt-meta {
+.gd-meta {
 	display: flex;
 	gap: 8px;
 	font-size: var(--font-ui-smaller, 0.8em);
 	color: var(--text-muted);
 }
 
-.pt-branch {
+.gd-branch {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	max-width: 14ch;
 }
 
-.pt-dirty {
+.gd-dirty {
 	color: var(--text-warning);
 }
 
@@ -194,7 +194,7 @@
  * One compact word per firing signal. No count: the number is in the tooltip and
  * adding it here is how this panel started adding a number for everything.
  */
-.pt-warn {
+.gd-warn {
 	flex-shrink: 0;
 	padding: 0 4px;
 	border-radius: 4px;
@@ -204,19 +204,19 @@
 	color: var(--text-muted);
 }
 
-.pt-warn.is-sustained-dirty,
-.pt-warn.is-long-branch {
+.gd-warn.is-sustained-dirty,
+.gd-warn.is-long-branch {
 	background-color: var(--background-modifier-error-hover);
 	color: var(--text-error);
 }
 
 /* Work that exists in exactly one place, so it gets the loudest colour. */
-.pt-warn.is-unpushed {
+.gd-warn.is-unpushed {
 	background-color: var(--background-modifier-error);
 	color: var(--text-on-accent);
 }
 
-.pt-right {
+.gd-right {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -239,22 +239,22 @@
  * with the score as the only bare number on the row, so neither slot needs the word that
  * names it.
  */
-.pt-slot {
+.gd-slot {
 	display: inline-flex;
 	align-items: baseline;
 }
 
-.pt-slot-pin .pt-slot-value {
+.gd-slot-pin .gd-slot-value {
 	color: var(--interactive-accent);
 	font-weight: 600;
 }
 
-.pt-slot-score .pt-slot-value {
+.gd-slot-score .gd-slot-value {
 	font-weight: 600;
 	color: var(--text-normal);
 }
 
-.pt-why {
+.gd-why {
 	font-size: var(--font-ui-smaller, 0.8em);
 	color: var(--text-faint);
 	overflow: hidden;
@@ -262,41 +262,41 @@
 	white-space: nowrap;
 }
 
-.pt-open {
+.gd-open {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	padding: 2px 6px;
 }
 
-.pt-open svg {
+.gd-open svg {
 	width: 14px;
 	height: 14px;
 }
 
 
 /* The weight sliders, as one group. Nine rows is enough to need a heading. */
-.pt-weights {
+.gd-weights {
 	margin-top: 4px;
 }
 
-.pt-weight-note {
+.gd-weight-note {
 	font-size: var(--font-ui-smaller, 0.85em);
 	color: var(--text-muted);
 	margin: 6px 0;
 }
 
-.pt-probe {
+.gd-probe {
 	font-size: var(--font-ui-smaller, 0.85em);
 	color: var(--text-muted);
 	margin: 6px 0;
 }
 
-.pt-probe.is-bad {
+.gd-probe.is-bad {
 	color: var(--text-error);
 }
 
-.pt-probe-row {
+.gd-probe-row {
 	display: flex;
 	gap: 8px;
 	align-items: baseline;
@@ -307,47 +307,47 @@
 }
 
 /* Three states, not two, so "installed but unusable" cannot read as fine. */
-.pt-probe-row.is-works {
+.gd-probe-row.is-works {
 	border-left-color: var(--color-green);
 }
 
-.pt-probe-row.is-broken {
+.gd-probe-row.is-broken {
 	border-left-color: var(--text-error);
 }
 
-.pt-probe-row.is-absent {
+.gd-probe-row.is-absent {
 	border-left-color: var(--background-modifier-border-hover);
 	opacity: 0.7;
 }
 
-.pt-probe-state {
+.gd-probe-state {
 	font-family: var(--font-monospace);
 	min-width: 6ch;
 	flex-shrink: 0;
 }
 
-.pt-probe-row.is-works .pt-probe-state {
+.gd-probe-row.is-works .gd-probe-state {
 	color: var(--color-green);
 }
 
-.pt-probe-row.is-broken .pt-probe-state {
+.gd-probe-row.is-broken .gd-probe-state {
 	color: var(--text-error);
 }
 
-.pt-probe-detail {
+.gd-probe-detail {
 	flex: 1;
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
 
-.pt-probe-version {
+.gd-probe-version {
 	flex-shrink: 0;
 	color: var(--text-faint);
 	font-family: var(--font-monospace);
 }
 
-.pt-body {
+.gd-body {
 	flex: 1;
 	overflow-y: auto;
 	min-height: 0;

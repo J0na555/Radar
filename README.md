@@ -1,4 +1,4 @@
-# Project Tracker
+# Gitdeck
 
 An Obsidian sidebar plugin that shows which local git projects you are actually
 working on, ranked, with one dashboard note in your vault.
@@ -109,8 +109,8 @@ except the `tracked` key above.
 
 ## Usage
 
-- Click the git-branch ribbon icon, or run "Project Tracker: Open Project Tracker".
-- "Project Tracker: Rescan projects" rescans without opening the panel.
+- Click the git-branch ribbon icon, or run "Gitdeck: Open Gitdeck".
+- "Gitdeck: Rescan projects" rescans without opening the panel.
 - Right-click a row to pin, unpin, reorder, or open the note.
 
 ## Settings
@@ -118,7 +118,7 @@ except the `tracked` key above.
 - **Scan root**: absolute path scanned for repositories. Defaults to
   `~/Documents/projects`.
 - **Dashboard folder**: vault-relative folder holding `Dashboard.md`, picked
-  from the folders in your vault. Defaults to `Project Tracker`. Move it under
+  from the folders in your vault. Defaults to `Gitdeck`. Move it under
   `private/` if you publish your vault and would rather the dashboard stayed out
   of published builds.
 - **Show dormant projects**: toggle visibility of dormant projects.
@@ -133,4 +133,4 @@ pnpm test     # node --test, runs the src/*.test.ts suites
 ```
 
 Deploy by copying `main.js`, `manifest.json`, and `styles.css` into
-`<vault>/.obsidian/plugins/project-tracker/`.
+`<vault>/.obsidian/plugins/gitdeck/`.

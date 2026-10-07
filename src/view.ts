@@ -15,7 +15,7 @@ import { rankProjects, topPinRank } from "./rank";
 import { isInsideScrollBox } from "./scroll";
 import type { Project, PluginSettings, SummaryState } from "./types";
 
-export const VIEW_TYPE_PROJECT_TRACKER = "project-tracker-view";
+export const VIEW_TYPE_GITDECK = "gitdeck-view";
 
 /**
  * Icon for the ribbon button and the view tab.
@@ -24,9 +24,9 @@ export const VIEW_TYPE_PROJECT_TRACKER = "project-tracker-view";
  * renders as a blank button instead of failing. Verified against the icon map in Obsidian
  * 1.13.7, which defines "git-branch".
  */
-export const ICON_PROJECT_TRACKER = "git-branch";
+export const ICON_GITDECK = "git-branch";
 
-export class ProjectTrackerView extends ItemView {
+export class GitdeckView extends ItemView {
 	private projects: Project[] = [];
 	private now = Date.now();
 	private scanning = false;
@@ -114,15 +114,15 @@ export class ProjectTrackerView extends ItemView {
 	}
 
 	override getViewType(): string {
-		return VIEW_TYPE_PROJECT_TRACKER;
+		return VIEW_TYPE_GITDECK;
 	}
 
 	override getDisplayText(): string {
-		return "Project Tracker";
+		return "Gitdeck";
 	}
 
 	override getIcon(): string {
-		return ICON_PROJECT_TRACKER;
+		return ICON_GITDECK;
 	}
 
 	/**
@@ -142,7 +142,7 @@ export class ProjectTrackerView extends ItemView {
 			this.projects = this.plugin.getProjects();
 			this.now = Date.now();
 		} catch (error) {
-			new Notice(`Project Tracker: scan failed (${String(error)})`);
+			new Notice(`Gitdeck: scan failed (${String(error)})`);
 		} finally {
 			this.scanning = false;
 			this.render();
@@ -356,7 +356,7 @@ export class ProjectTrackerView extends ItemView {
 		});
 		if (saved) return;
 		new Notice(
-			`Project Tracker: could not save the pin for ${project.facts.name}. ${this.plugin.errorLogSentence}`,
+			`Gitdeck: could not save the pin for ${project.facts.name}. ${this.plugin.errorLogSentence}`,
 			0,
 		);
 	}
@@ -391,7 +391,7 @@ export class ProjectTrackerView extends ItemView {
 			// that escapes it so a thrown error never leaves the control stuck on "…", and
 			// names the log so a failure is readable without the devtools console.
 			new Notice(
-				`Project Tracker: summary failed for ${project.facts.name} (${String(error)}). ${this.plugin.errorLogSentence}`,
+				`Gitdeck: summary failed for ${project.facts.name} (${String(error)}). ${this.plugin.errorLogSentence}`,
 				0,
 			);
 		} finally {

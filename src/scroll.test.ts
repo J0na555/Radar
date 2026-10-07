@@ -5,7 +5,7 @@ import { isInsideScrollBox } from "./scroll.ts";
 /**
  * A row, and the box it is being scrolled inside.
  *
- * The panel's own numbers: a 400px-tall `.pt-body` below a 120px header, so the ancestor box
+ * The panel's own numbers: a 400px-tall `.gd-body` below a 120px header, so the ancestor box
  * starts 120px above the list. Everything here is about which box the comparison is handed.
  */
 const HEADER_PX = 120;
@@ -13,7 +13,7 @@ const BODY_PX = 400;
 const WIDTH = 300;
 const ROW_PX = 40;
 
-/** The scroller itself: `.pt-body`, with `overflow-y: auto`. */
+/** The scroller itself: `.gd-body`, with `overflow-y: auto`. */
 function scrollBox(): { top: number; bottom: number; left: number; right: number } {
 	return { top: HEADER_PX, bottom: HEADER_PX + BODY_PX, left: 0, right: WIDTH };
 }
@@ -26,7 +26,7 @@ function offsetParentBox(): { top: number; bottom: number; left: number; right: 
 	return { top: 0, bottom: HEADER_PX + BODY_PX, left: 0, right: WIDTH };
 }
 
-/** A row whose top edge is `fromTop` pixels below the top of `.pt-body`. */
+/** A row whose top edge is `fromTop` pixels below the top of `.gd-body`. */
 function row(fromTop: number): { top: number; bottom: number; left: number; right: number } {
 	return {
 		top: HEADER_PX + fromTop,
@@ -51,7 +51,7 @@ describe("isInsideScrollBox", () => {
 	});
 
 	it("calls the same row visible against the ancestor box", () => {
-		// `.pt-body` declares no `position`, so `offsetParent` skipped it and returned a box
+		// `.gd-body` declares no `position`, so `offsetParent` skipped it and returned a box
 		// 120px taller at the top. Every row in that header band is inside it, so the panel
 		// decided the row was already on screen and left the scroll alone.
 		assert.equal(isInsideScrollBox(offsetParentBox(), row(-40)), true);

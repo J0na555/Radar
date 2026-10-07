@@ -55,7 +55,7 @@ export function drawPanelBody(
 
 	for (const group of result.groups) {
 		const heading = doc.createElement("div");
-		heading.className = "pt-group";
+		heading.className = "gd-group";
 		heading.textContent = describeGroup(group, options.filtering);
 		// What this group is hiding, on hover and for a screen reader. Empty when the
 		// group is showing everything, in which case there is nothing to say.

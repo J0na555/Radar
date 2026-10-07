@@ -24,8 +24,8 @@ const EDGE_SLACK_PX = 1;
 /**
  * Whether `row` is inside the visible box of the thing that scrolls it.
  *
- * `scrollBox` has to be the scroller itself, `.pt-body`. Asking the row for its
- * `offsetParent` instead gives the nearest *positioned* ancestor, and `.pt-body`
+ * `scrollBox` has to be the scroller itself, `.gd-body`. Asking the row for its
+ * `offsetParent` instead gives the nearest *positioned* ancestor, and `.gd-body`
  * declares no `position`, so it can never be the answer: the comparison ran against
  * a taller box starting above the list, where a row scrolled slightly past the top
  * reads as visible. That is what broke `p`, since pinning jumps exactly that far.

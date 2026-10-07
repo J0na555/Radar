@@ -136,7 +136,7 @@ export function runOpen(
 	child.once("error", (error: NodeJS.ErrnoException) => {
 		onError(
 			error.code === "ENOENT"
-				? `${plan.command} is not on PATH. Fix the editor command in the Project Tracker settings, or clear it to open the folder in the file manager.`
+				? `${plan.command} is not on PATH. Fix the editor command in the Gitdeck settings, or clear it to open the folder in the file manager.`
 				: `could not run ${plan.command}: ${error.message}`,
 		);
 	});

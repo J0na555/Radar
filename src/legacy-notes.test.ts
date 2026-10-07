@@ -55,7 +55,7 @@ function legacyNote(options: { project?: string; provider?: string; summary?: st
 
 describe("isLegacySummaryPath", () => {
 	it("recognises the v0.1 naming", () => {
-		assert.equal(isLegacySummaryPath("private/Project Tracker/projects/api-ai.md"), true);
+		assert.equal(isLegacySummaryPath("private/Gitdeck/projects/api-ai.md"), true);
 		assert.equal(isLegacySummaryPath("api-ai-ai.md"), true);
 		assert.equal(isLegacySummaryPath("API-AI.md"), true);
 	});
@@ -223,13 +223,13 @@ describe("findLegacySummaryNotes", () => {
 describe("legacyFolders", () => {
 	it("counts per folder, biggest first", () => {
 		const paths = [
-			"private/Project Tracker/projects/a-ai.md",
-			"private/Project Tracker/projects/b-ai.md",
+			"private/Gitdeck/projects/a-ai.md",
+			"private/Gitdeck/projects/b-ai.md",
 			"Archive/c-ai.md",
 			"Notes/not-ours.md",
 		];
 		assert.deepEqual(legacyFolders(paths), [
-			{ folder: "private/Project Tracker/projects", count: 2 },
+			{ folder: "private/Gitdeck/projects", count: 2 },
 			{ folder: "Archive", count: 1 },
 		]);
 	});

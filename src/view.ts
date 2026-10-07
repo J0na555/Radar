@@ -197,6 +197,9 @@ export class ProjectTrackerView extends ItemView {
 			scanning: this.scanning,
 			explainScores: this.plugin.settings.explainScores,
 			status: describeFilter(result),
+			visible: result.visible,
+			scanned: result.scanned,
+			weak: result.weak,
 			scanRoot: this.plugin.settings.scanRoot,
 		});
 

@@ -189,19 +189,18 @@ export function createOpenControl(doc: Document, label: string, onOpen: () => vo
 }
 
 /**
- * The score, in its own slot, saying what it is. The word `score` is on the row rather than
- * only in the tooltip because two of these projects were reported as having "it" and nobody
- * could tell what. The breakdown comes from `parts`, so the tooltip cannot describe a
+ * The score, in its own slot, as a bare number.
+ *
+ * The word `score` used to sit beside it, because two of these projects were reported as
+ * having "it" and nobody could tell what. The pin rank carries a `#` and this is the only
+ * bare number on the row, so one marker tells them apart, and a word here would be a width
+ * the row cannot give up when the sidebar narrows. What the number is made of stays on the
+ * tooltip and the `Why` line, and both come from `parts`, so neither can describe a
  * different score than the number beside it.
  */
 export function createScoreSlot(doc: Document, score: ScoreResult): HTMLElement {
 	const slot = doc.createElement("span");
 	slot.className = "pt-slot pt-slot-score";
-
-	const tag = doc.createElement("span");
-	tag.className = "pt-slot-tag";
-	tag.textContent = "score";
-	slot.appendChild(tag);
 
 	const value = doc.createElement("span");
 	value.className = "pt-slot-value";
@@ -223,11 +222,6 @@ export function createPinSlot(doc: Document, pin: number | null): HTMLElement {
 	const slot = doc.createElement("span");
 	slot.className = "pt-slot pt-slot-pin";
 	if (pin === null) return slot;
-
-	const tag = doc.createElement("span");
-	tag.className = "pt-slot-tag";
-	tag.textContent = "pin";
-	slot.appendChild(tag);
 
 	const value = doc.createElement("span");
 	slot.appendChild(value);

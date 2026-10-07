@@ -31,21 +31,22 @@
 	font-size: var(--font-ui-smaller, 0.9em);
 }
 
+/*
+ * What the filter is hiding, on a line of its own and only while it has something to
+ * say. `hidden` is set from the header, so a panel showing everything spends no height
+ * here at all: no line, no margins, nothing stacked under the scan root.
+ */
 .pt-status {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: 8px;
 	font-size: var(--font-ui-smaller, 0.8em);
 	color: var(--text-muted);
-	margin: 2px 0 4px;
-}
-
-.pt-status-text {
-	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	margin: 2px 0 4px;
+}
+
+.pt-status[hidden] {
+	display: none;
 }
 
 /* The shortcuts, once, in the least prominent style available. */
@@ -75,13 +76,28 @@
 	color: var(--text-on-accent);
 }
 
+/*
+ * The scan root, with the shortcut hints on the same line.
+ *
+ * The path is the half that ellipsizes: an absolute path is long by nature and the hints
+ * are short, fixed, and the only copy of the keyboard map the panel shows.
+ */
 .pt-root {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
 	font-size: var(--font-ui-smaller, 0.8em);
 	color: var(--text-muted);
+	margin-bottom: 10px;
+}
+
+.pt-root-path {
+	flex: 1;
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	margin-bottom: 10px;
 }
 
 .pt-group {
@@ -213,20 +229,19 @@
  *
  * They shared one position before, so which number was which came down to where
  * it sat, and the score jumped sideways whenever a project was pinned. Each slot
- * carries the word that names it, and the pin slot is drawn either way so the
- * layout does not move under the number.
+ * now keeps a place of its own, and the pin slot is drawn either way so the two
+ * stay in a fixed order on the right.
+ *
+ * No fixed width on either. A floor here is the one thing on the row that cannot give
+ * way when the sidebar narrows: the name ellipsizes while the numbers hold theirs, so a
+ * slot sized to something other than its own digits reads as full length next to content
+ * that has squeezed to nothing. What tells the two numbers apart is the `#` on the pin,
+ * with the score as the only bare number on the row, so neither slot needs the word that
+ * names it.
  */
 .pt-slot {
 	display: inline-flex;
 	align-items: baseline;
-	gap: 3px;
-	min-width: 5.5ch;
-	justify-content: flex-end;
-}
-
-.pt-slot-tag {
-	font-size: 0.8em;
-	color: var(--text-faint);
 }
 
 .pt-slot-pin .pt-slot-value {

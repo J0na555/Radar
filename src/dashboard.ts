@@ -272,14 +272,20 @@ function cell(value: string): string {
 }
 
 /**
- * A wikilink cell.
+ * A wikilink cell, with the alias separator escaped like every other pipe.
  *
- * Built rather than passed through `cell`, because the pipe separating path from alias is the
- * syntax: escaping it turns `[[a/b|c]]` into a link with no alias at all, which reads as a
- * missing note. Only the two halves are escaped, and a filename cannot contain a pipe anyway.
+ * Two parsers read this row, and they read it in order: the table parser splits the line into
+ * cells on unescaped pipes, and the wikilink parser runs on the text of one cell afterwards.
+ * So the separator is written `\|`, which is what tells the table parser the cell continues
+ * past it, and the table parser hands the cell on with that backslash already removed, so the
+ * link parser still sees `[[path|alias]]` with a real separator and the alias survives.
+ * Obsidian documents this form for an alias inside a table, and its own editor writes it.
+ *
+ * The halves go through `cell` for the ordinary reason: a pipe in a path or a filename would
+ * end the cell early just the same.
  */
 function linkCell(path: string): string {
-	return `[[${cell(path)}|${cell(basename(path))}]]`;
+	return `[[${cell(path)}\\|${cell(basename(path))}]]`;
 }
 
 /** The filename of a vault path, which is what a wikilink should be named after. */

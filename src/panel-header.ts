@@ -26,8 +26,19 @@ export interface PanelHeaderState {
 	/** True while a scan is running, which is the only thing that says so. */
 	scanning: boolean;
 	explainScores: boolean;
-	/** The sentence from `describeFilter`, so the header does not count anything itself. */
+	/**
+	 * The sentence from `describeFilter`, verbatim. The header draws it only when it
+	 * explains something, which is what the counts below are for: the common case is a
+	 * panel showing everything, and a line reporting that is height spent on nothing.
+	 * The wording stays in `filter.ts`, where its unit tests are.
+	 */
 	status: string;
+	/** Projects on screen now. */
+	visible: number;
+	/** Projects the scan found, before any filter ran. */
+	scanned: number;
+	/** Visible rows dimmed rather than dropped, which the sentence reports as well. */
+	weak: number;
 	/** Absolute path being scanned, shown once under the controls. */
 	scanRoot: string;
 }
@@ -59,7 +70,7 @@ export class PanelHeader {
 	private readonly doc: Document;
 	private readonly searchEl: HTMLInputElement;
 	private readonly statusEl: HTMLElement;
-	private readonly rootEl: HTMLElement;
+	private readonly rootPathEl: HTMLElement;
 	private readonly refreshEl: HTMLButtonElement;
 	private readonly toggles = new Map<string, HTMLButtonElement>();
 
@@ -137,23 +148,28 @@ export class PanelHeader {
 		});
 		header.appendChild(this.searchEl);
 
-		this.rootEl = doc.createElement("div");
-		this.rootEl.className = "pt-root";
-		host.appendChild(this.rootEl);
+		// The scan root and the shortcut hints share one line, so the status line below
+		// can be dropped when it has nothing to say: a line carrying the hints would have
+		// to stay even on a panel where the filter is explaining nothing.
+		const root = doc.createElement("div");
+		root.className = "pt-root";
+		host.appendChild(root);
 
-		const status = doc.createElement("div");
-		status.className = "pt-status";
-		host.appendChild(status);
-
-		const statusText = doc.createElement("span");
-		statusText.className = "pt-status-text";
-		status.appendChild(statusText);
+		this.rootPathEl = doc.createElement("span");
+		this.rootPathEl.className = "pt-root-path";
+		root.appendChild(this.rootPathEl);
 
 		const hints = doc.createElement("span");
 		hints.className = "pt-keys";
 		hints.textContent = keyHints();
-		status.appendChild(hints);
-		this.statusEl = statusText;
+		root.appendChild(hints);
+
+		// Its own line, and `hidden` until it has something to say, which is most of the
+		// time: the panel showing everything is the common case.
+		this.statusEl = doc.createElement("div");
+		this.statusEl.className = "pt-status";
+		this.statusEl.hidden = true;
+		host.appendChild(this.statusEl);
 
 		this.rowsEl = doc.createElement("div");
 		this.rowsEl.className = "pt-body";
@@ -183,9 +199,17 @@ export class PanelHeader {
 		for (const [key, el] of this.toggles) setPressed(el, pressed[key] === true);
 
 		const root = state.scanRoot;
-		if (this.rootEl.textContent !== root) this.rootEl.textContent = root;
-		const status = state.status;
+		if (this.rootPathEl.textContent !== root) this.rootPathEl.textContent = root;
+
+		// The sentence earns its line only when it explains something the rows do not:
+		// a filter hiding a project, an empty panel, or a row dimmed by a loose match.
+		// Everything shown and nothing dimmed is the common case, and a line reporting it
+		// is height spent on nothing, so the line goes. The wording itself still comes
+		// from `describeFilter`, where it is tested.
+		const quiet = state.visible === state.scanned && state.visible > 0 && state.weak === 0;
+		const status = quiet ? "" : state.status;
 		if (this.statusEl.textContent !== status) this.statusEl.textContent = status;
+		this.statusEl.hidden = quiet;
 	}
 
 	/** Put the caret in the search box, with any query already in it selected. */

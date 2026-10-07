@@ -56,6 +56,18 @@ function entry(overrides: Partial<SummaryEntry> = {}): SummaryEntry {
 	};
 }
 
+/**
+ * One row split into cells the way the table parser splits it: on pipes nothing escapes,
+ * with the escapes then handed on as the next parser receives them. The row is the line
+ * between two outer pipes, which is the shape `renderProjectsSection` writes.
+ */
+function cells(row: string): string[] {
+	const inner = row.startsWith("|") && row.endsWith("|") ? row.slice(1, -1) : row;
+	return inner
+		.split(/(?<!\\)\|/)
+		.map((cell) => cell.trim().replace(/\\\|/g, "|"));
+}
+
 describe("dashboardPath", () => {
 	it("puts the one owned file in the notes folder", () => {
 		assert.equal(dashboardPath(settings("Project Tracker")), `Project Tracker/${DASHBOARD_FILE}`);
@@ -112,7 +124,21 @@ describe("renderProjectsSection", () => {
 
 	it("links a note by path so a shared basename cannot resolve the wrong one", () => {
 		const text = renderProjectsSection([project({ notePath: "Archive/2023/api-ai.md" })], NOW);
-		assert.match(text, /\[\[Archive\/2023\/api-ai\.md\|api-ai\]\]/);
+		assert.match(text, /\[\[Archive\/2023\/api-ai\.md\\\|api-ai\]\]/);
+	});
+
+	it("holds an aliased link to a path with a space inside one cell of an eight-cell row", () => {
+		// The table parser sees the line before the wikilink parser sees the link, so the row
+		// has to be eight cells first and a link second. Both come out of the same string.
+		const text = renderProjectsSection([project({ notePath: "private/Project Tracker/web.md" })], NOW);
+		const lines = text.split("\n").filter((line) => line.startsWith("|"));
+		const header = cells(lines[0]);
+		const row = cells(lines[2]);
+
+		assert.equal(header.length, 8, "the header is eight columns");
+		assert.equal(header[6], "Note");
+		assert.equal(row.length, 8, "the row is eight cells");
+		assert.equal(row[6], "[[private/Project Tracker/web.md|web]]");
 	});
 
 	it("says no note rather than rendering a dead link", () => {
@@ -139,6 +165,8 @@ describe("renderProjectsSection", () => {
 		// An unescaped pipe splits the row into two columns and the table stops parsing.
 		const text = renderProjectsSection([project({}, { name: "a|b" })], NOW);
 		assert.match(text, /\| a\\\|b \|/);
+		const rows = text.split("\n").filter((line) => line.startsWith("|"));
+		assert.equal(cells(rows[2]).length, 8, "the escaped name still leaves the row at eight cells");
 	});
 
 	it("does not break the row on a newline in a name", () => {

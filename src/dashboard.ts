@@ -12,6 +12,7 @@
  * `markers.ts` for why that is decided there and how a broken span is handled.
  */
 import { normalizePath } from "./obsidian-compat.ts";
+import { cell, linkCell } from "./format.ts";
 import { replaceSection, sectionBody } from "./markers.ts";
 import { rankProjects } from "./rank.ts";
 import type { SummaryBody } from "./summary.ts";
@@ -264,34 +265,6 @@ function provenanceLine(record: SummaryRecord | null): string {
 			? ` ${record.dirtyCount} uncommitted file(s) at that point, which are in no commit.`
 			: " The working tree was clean at that point.";
 	return `Generated ${when} from ${commit}.${dirty}`;
-}
-
-/** One table cell. A pipe in a project name would otherwise split the row in two. */
-function cell(value: string): string {
-	return value.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
-}
-
-/**
- * A wikilink cell, with the alias separator escaped like every other pipe.
- *
- * Two parsers read this row, and they read it in order: the table parser splits the line into
- * cells on unescaped pipes, and the wikilink parser runs on the text of one cell afterwards.
- * So the separator is written `\|`, which is what tells the table parser the cell continues
- * past it, and the table parser hands the cell on with that backslash already removed, so the
- * link parser still sees `[[path|alias]]` with a real separator and the alias survives.
- * Obsidian documents this form for an alias inside a table, and its own editor writes it.
- *
- * The halves go through `cell` for the ordinary reason: a pipe in a path or a filename would
- * end the cell early just the same.
- */
-function linkCell(path: string): string {
-	return `[[${cell(path)}\\|${cell(basename(path))}]]`;
-}
-
-/** The filename of a vault path, which is what a wikilink should be named after. */
-function basename(path: string): string {
-	const name = path.split("/").pop() ?? path;
-	return name.replace(/\.md$/i, "");
 }
 
 /** Days since an ISO date, in the words the panel uses. */

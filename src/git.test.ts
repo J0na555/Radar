@@ -5,7 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
 import { isoDate, relativeAge } from "./format.ts";
-import { parseGithubSlug, readRepoFacts, toWebUrl } from "./git.ts";
+import { countCommitsSince, parseGithubSlug, readRepoFacts, toWebUrl } from "./git.ts";
 
 describe("toWebUrl", () => {
 	it("converts an scp-style ssh remote to a github.com URL", () => {
@@ -204,6 +204,37 @@ describe("readRepoFacts health probes", () => {
 		assert.equal(facts.gitReadable, false);
 		assert.equal(facts.stashCount, null);
 		assert.equal(facts.unpushedCount, null);
+	});
+});
+
+describe("countCommitsSince", () => {
+	it("counts commits made since a date in the past", () => {
+		const dir = repoWithCommit("gd-since-");
+		runGit(dir, ["commit", "-q", "--allow-empty", "-m", "second"]);
+		runGit(dir, ["commit", "-q", "--allow-empty", "-m", "third"]);
+		assert.equal(countCommitsSince(dir, "2000-01-01"), 3);
+	});
+
+	it("returns zero when nothing was committed in the window", () => {
+		// Two days ahead rather than a far-future year: git silently drops a `--since` date it
+		// considers absurd, which would count every commit and hide a broken filter.
+		const dir = repoWithCommit("gd-since-future-");
+		const ahead = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+		assert.equal(countCommitsSince(dir, ahead), 0);
+	});
+
+	it("returns zero for a repo with no commits", () => {
+		const dir = tmpDir("gd-since-empty-");
+		assert.equal(spawnSync("git", ["init", "-q", "."], { cwd: dir, encoding: "utf8" }).status, 0);
+		assert.equal(countCommitsSince(dir, "2000-01-01"), 0);
+	});
+
+	it("returns zero rather than throwing for a path that is not a repo", () => {
+		assert.equal(countCommitsSince(tmpDir("gd-since-notrepo-"), "2000-01-01"), 0);
+	});
+
+	it("returns zero rather than throwing for a path that does not exist", () => {
+		assert.equal(countCommitsSince(path.join(os.tmpdir(), "gd-no-such-repo-xyz"), "2000-01-01"), 0);
 	});
 });
 

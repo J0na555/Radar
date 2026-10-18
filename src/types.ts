@@ -306,6 +306,15 @@ export interface PluginSettings {
 	 * the bare number unreadable. The score tooltip is there either way.
 	 */
 	explainScores: boolean;
+	/**
+	 * Write one file per ISO week into `<notes folder>/Weekly/`, regenerated on every scan.
+	 *
+	 * Off by default, and that default is the point: writing a file into someone's vault
+	 * unprompted is the kind of thing that gets a plugin uninstalled, so it waits to be asked.
+	 * Turning it off does not delete anything already written; those files are the user's to
+	 * keep or remove.
+	 */
+	weeklyNotes: boolean;
 	/** Points the score model awards. */
 	weights: ScoreWeights;
 	/**

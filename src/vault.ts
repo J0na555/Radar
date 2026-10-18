@@ -1,10 +1,12 @@
 import { App, TFile, TFolder, normalizePath } from "obsidian";
 import { spawnSync } from "child_process";
 import { assertSafeTarget, dashboardPath, renderDashboard } from "./dashboard";
+import { replaceSection, sectionBody } from "./markers";
 import type { NoteCandidate } from "./note-link";
 import { stateFromRecord } from "./machine-state";
 import type { LegacyNoteState, LegacySummaryFrontmatter } from "./machine-state";
 import { PluginSettings, Project, ProjectFrontmatter, RepoFacts, SummaryState } from "./types";
+import { assertSafeWeeklyTarget, isWeeklyNotePath, renderWeeklySection, weeklyFolder, weeklyPath } from "./week";
 
 /** Create `folder` and any missing parents. No-op when it already exists. */
 export async function ensureFolder(app: App, folder: string): Promise<void> {
@@ -54,12 +56,18 @@ export function listVaultFolders(app: App): string[] {
  * The dashboard is excluded. A repository named `Dashboard` would otherwise resolve to the
  * dashboard as its own project note and link to itself, and the plugin's one file is not a
  * document about any one project.
+ *
+ * The weekly notes are excluded for the same reason: one more document the plugin owns, named
+ * after a week rather than a project, and not a note about any one project either. Only the
+ * plugin's own week files are skipped, not everything in the folder: `isWeeklyNotePath` explains
+ * why the folder alone cannot be the test.
  */
 export function readNoteCandidates(app: App, settings: PluginSettings): NoteCandidate[] {
 	const dashboard = dashboardPath(settings);
 	const candidates: NoteCandidate[] = [];
 	for (const file of app.vault.getMarkdownFiles()) {
 		if (file.path === dashboard) continue;
+		if (isWeeklyNotePath(settings, file.path)) continue;
 		// `tracked` has two forms and only one of them is a boolean. `tracked: true` promotes the
 		// note for the project it is named after; `tracked: api-ai` binds it to that project
 		// whatever it is called. A string is therefore never read as a flag: `tracked: "yes"` in a
@@ -140,6 +148,82 @@ export async function writeDashboard(
 
 	if (existing instanceof TFile) {
 		if (previous === content) return target;
+		try {
+			await app.vault.modify(existing, content);
+		} catch {
+			return null;
+		}
+		return target;
+	}
+
+	try {
+		await app.vault.create(target, content);
+	} catch {
+		return null;
+	}
+	return target;
+}
+
+/**
+ * Write this week's note: the two tables inside their markers, and nothing else.
+ *
+ * Modelled on `syncDashboard`, with one difference that matters: the path is a week, so `now`
+ * is passed to the guard, the renderer and the path from the same value. A scan that straddles
+ * midnight on Sunday must not render one week and validate against another, and re-deriving
+ * `now` anywhere below is how that would happen.
+ *
+ * Reads before writing so a scan that changes nothing does not modify the file, for the same
+ * reason the dashboard does not: this sits in the user's vault and rewriting an identical file
+ * every 30 seconds shows up as a change in whatever syncs that vault. Only this week's file is
+ * ever touched; earlier weeks stay where they were written.
+ *
+ * Unlike the dashboard, this never adopts a file that is already at its path. The dashboard's
+ * path comes from a setting the user points at the plugin's own file, so an existing file there
+ * is expected and appending to it is the feature. This path is generated from the week, so a file
+ * already sitting on it was not made by the plugin. Obsidian's core weekly notes use the same
+ * filename shape, and appending machine tables into somebody's journal is not a thing to guess
+ * at. When the file exists but has no weekly section, the write is skipped and null returned.
+ *
+ * A refused write or an unreadable vault returns null rather than throwing. The panel already
+ * has everything it shows; this file is a view of the same data.
+ */
+export async function syncWeekly(
+	app: App,
+	settings: PluginSettings,
+	projects: readonly Project[],
+	commitsThisWeek: ReadonlyMap<string, number>,
+	now: number = Date.now(),
+): Promise<string | null> {
+	const target = weeklyPath(settings, now);
+	assertSafeWeeklyTarget(settings, target, now);
+	await ensureFolder(app, weeklyFolder(settings));
+
+	const existing = app.vault.getAbstractFileByPath(target);
+	let doc: string | null = null;
+	if (existing instanceof TFile) {
+		try {
+			doc = await app.vault.read(existing);
+		} catch {
+			return null;
+		}
+		// A file already at this path was not made by us. Obsidian's core weekly notes share the
+		// `YYYY-Www.md` name, so a file with no weekly section is left alone rather than having
+		// machine tables appended into it. The dashboard does the opposite on purpose: see the
+		// header comment for why the two paths differ.
+		if (sectionBody(doc ?? "", "weekly") === null) return null;
+	}
+
+	let content: string;
+	try {
+		content = replaceSection(doc ?? "", "weekly", renderWeeklySection(projects, commitsThisWeek, now));
+	} catch {
+		// A project name carrying a marker prefix would break the section structure the next
+		// write depends on. Refusing keeps the note intact; the panel is unaffected.
+		return null;
+	}
+
+	if (doc === content) return target;
+	if (existing instanceof TFile) {
 		try {
 			await app.vault.modify(existing, content);
 		} catch {

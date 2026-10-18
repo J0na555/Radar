@@ -69,6 +69,33 @@ warnings. It is replaced on every scan.
 The **summaries** section holds one folded AI summary per project, and only
 changes when you generate one. Nothing else touches it.
 
+### The weekly note
+
+Off by default. When you turn it on, each scan writes one file per ISO week at
+`<dashboard folder>/Weekly/<ISO-week>.md`, for example
+`Gitdeck/Weekly/2026-W42.md`. Turning the setting off never deletes a file that
+has already been written; the old weeks stay put, yours to keep or remove.
+
+The file has one section, between these markers:
+
+```markdown
+<!-- pt:weekly:start -->
+<!-- pt:weekly:end -->
+```
+
+The plugin owns what is between them and regenerates it wholesale on every scan,
+so the note never becomes a sequence of stale blocks. Everything outside the
+markers is yours and is copied through untouched.
+
+The plugin creates its weekly files. A file already sitting at the weekly path
+without the markers is left alone: Obsidian's core weekly notes use the same
+`YYYY-Www.md` name, so that file is not the plugin's to write into.
+
+The middle holds two tables: what moved this week, with a commit count per
+project, and what is still open but did not commit. It is built from git facts
+only, the same ones the panel reads. No AI provider and no model call; the only
+subprocess is `git`, and nothing from your vault leaves the machine.
+
 ### Your own project notes
 
 The plugin does not create notes any more. It links to notes you already have,

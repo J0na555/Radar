@@ -222,6 +222,7 @@ describe("buildPrompt", () => {
 		notesFolder: "Projects",
 		showDormant: false,
 		explainScores: false,
+		weeklyNotes: false,
 		weights: { ...DEFAULT_WEIGHTS },
 		provider: "gemini",
 		commitCount: 20,

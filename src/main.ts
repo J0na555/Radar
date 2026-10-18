@@ -12,7 +12,7 @@ import {
 } from "./context";
 import { dashboardPath, upsertSummaryEntry } from "./dashboard";
 import type { SummaryEntry } from "./dashboard";
-import { scanProjects } from "./git";
+import { countCommitsSince, scanProjects } from "./git";
 import { openRepoFolder } from "./editor";
 import { healthSignals } from "./health";
 import { findLegacySummaryNotes, isLegacySummaryPath, legacyFolders, recordFromLegacyHeader } from "./legacy-notes";
@@ -60,8 +60,10 @@ import {
 	readNoteCandidates,
 	readSummaryStates,
 	syncDashboard,
+	syncWeekly,
 	writeDashboard,
 } from "./vault";
+import { weekStartKey, weeklyFolder } from "./week";
 import { WriteChain } from "./write-chain";
 import { renderWeightSettings } from "./weight-settings";
 import {
@@ -81,6 +83,9 @@ const DEFAULT_SETTINGS: PluginSettings = {
 	// The "why this score" line doubles the height of the list, so it is a toggle
 	// rather than a default. The tooltip on the score needs no permission.
 	explainScores: false,
+	// Opt-in, and off. Writing a file into a vault nobody asked to change is how a plugin
+	// overstays its welcome, so the weekly note waits to be turned on.
+	weeklyNotes: false,
 	weights: { ...DEFAULT_WEIGHTS },
 	// null means "detect a working CLI", which is the point of auto-detection. A value
 	// here would be a choice the user never made, and honouring it would reinstate the
@@ -152,6 +157,17 @@ export default class GitdeckPlugin extends Plugin {
 	 * on the chain too, which is why this is a chain rather than a queue keyed by project.
 	 */
 	private readonly dashboardWrites = new WriteChain();
+
+	/**
+	 * Weekly writes, strictly serial.
+	 *
+	 * A separate chain from `dashboardWrites`, and deliberately not a reuse of it: that one is
+	 * for the dashboard document, whose whole reason for serialising is that a scan and a summary
+	 * generation both read and write it. This is a different file with a different writer, so
+	 * putting them on one chain would order two documents against each other for no reason. The
+	 * overlapping case here is two refreshes at once, which this chain alone settles.
+	 */
+	private readonly weeklyWrites = new WriteChain();
 
 	/**
 	 * Register everything the plugin adds to the workspace.
@@ -611,6 +627,28 @@ export default class GitdeckPlugin extends Plugin {
 		// file and the two must not read it at the same time.
 		await this.dashboardWrites.run(() => syncDashboard(this.app, this.settings, this.projects, now));
 
+		// The weekly note is a different document from the dashboard, so it has its own chain
+		// rather than sharing `dashboardWrites`: that chain exists because two different jobs read
+		// and rewrite the dashboard. This file has one job, but two doors into it, the view's
+		// refresh and the settings toggle's `void refresh()`, and two overlapping runs would each
+		// read and rewrite the same file. Both the read and the write go through the chain so the
+		// second run sees the first. One `git log` per repo, and only when the setting is on, so a
+		// user who never turned it on never pays for the spawns.
+		if (this.settings.weeklyNotes) {
+			// Keyed by path, not name: two repos under the scan root can share a basename, and a
+			// name-keyed map would hand each of them the other's commit count.
+			const commitsThisWeek = new Map<string, number>();
+			for (const project of this.projects) {
+				commitsThisWeek.set(
+					project.facts.path,
+					countCommitsSince(project.facts.path, weekStartKey(now)),
+				);
+			}
+			await this.weeklyWrites.run(() =>
+				syncWeekly(this.app, this.settings, this.projects, commitsThisWeek, now),
+			);
+		}
+
 		// After the dashboard exists, because that is where the text lands. Before the settings
 		// save below, so a failed scan leaves the import still owed rather than skipped.
 		await this.importLegacySummaries();
@@ -919,6 +957,21 @@ class GitdeckSettingTab extends PluginSettingTab {
 				toggle.setValue(this.plugin.settings.explainScores).onChange(async (value) => {
 					this.plugin.settings.explainScores = value;
 					await this.plugin.saveSettings();
+				}),
+			);
+
+		new Setting(containerEl)
+			.setName("Weekly note")
+			.setDesc(
+				`Off by default. Writes one file per ISO week in ${weeklyFolder(this.plugin.settings)}/, regenerated on every scan so it never accumulates stale blocks. Only the part between the markers is machine-owned; everything outside them is yours. Turning this off never deletes files already written.`,
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.weeklyNotes).onChange(async (value) => {
+					this.plugin.settings.weeklyNotes = value;
+					await this.plugin.saveSettings();
+					// Write the file now rather than waiting for a later scan, so flipping the
+					// toggle shows its effect immediately.
+					if (value) void this.plugin.refresh();
 				}),
 			);
 

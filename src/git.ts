@@ -250,3 +250,21 @@ export function scanProjects(root: string, maxDepth = 2): RepoFacts[] {
 	if (!fs.existsSync(root)) return [];
 	return findRepos(root, maxDepth).map((repo) => readRepoFacts(repo, root));
 }
+
+/**
+ * Count commits on HEAD since `since`, a `YYYY-MM-DD` date, or 0 when the probe failed.
+ *
+ * `--since` is git's own date filter and is passed literally: no shell is involved, so nothing
+ * expands it before git sees it. HEAD only, which is what "did this project move this week"
+ * means for a repo you are working in.
+ *
+ * Zero and "could not ask" are the same number here, unlike `readStashCount`, because this is
+ * read by the weekly writer and a scan that could not count must not invent activity. A repo
+ * with no commits, a path that is not a repo, and a missing git all land on 0. This never
+ * throws: one odd repo in a scan of 45 must not abort the note.
+ */
+export function countCommitsSince(repoPath: string, since: string): number {
+	const out = git(repoPath, ["log", `--since=${since}`, "--format=%H"]);
+	if (out === null || out === "") return 0;
+	return out.split("\n").filter((line) => line.length > 0).length;
+}

@@ -19,7 +19,7 @@
  */
 
 /** The sections the plugin owns, in the order they appear in the note. */
-export type SectionId = "projects" | "summaries";
+export type SectionId = "projects" | "summaries" | "weekly";
 
 /**
  * The markers themselves.
@@ -31,6 +31,7 @@ export type SectionId = "projects" | "summaries";
 export const SECTION_MARKERS: Record<SectionId, { start: string; end: string }> = {
 	projects: { start: "<!-- pt:projects:start -->", end: "<!-- pt:projects:end -->" },
 	summaries: { start: "<!-- pt:summaries:start -->", end: "<!-- pt:summaries:end -->" },
+	weekly: { start: "<!-- pt:weekly:start -->", end: "<!-- pt:weekly:end -->" },
 };
 
 /**
@@ -82,6 +83,14 @@ export function findSection(lines: readonly string[], id: SectionId): SectionSpa
  * wrote themselves appends to it. That case is the reason this function is careful: `Dashboard.md`
  * is a filename a person picks, and adopting theirs must not cost them a byte of it.
  *
+ * The append only happens when there is no start marker for this section anywhere in the note. A
+ * whole-line start marker with no end marker is a half-written span, and appending a fresh pair
+ * beside it would manufacture a span over text that was never ours: `findSection` pairs the first
+ * start marker with the last end marker, so the next read would reach across the user's prose and
+ * the write after that would delete it. Guessing at a half-written span is the thing this module
+ * exists to refuse, so that case throws and the caller leaves the file alone. A stray end marker
+ * on its own is safe to append past, because a span needs a start before it.
+ *
  * Throws when the body contains a marker. See `MARKER_PREFIX`.
  */
 export function replaceSection(doc: string, id: SectionId, body: string): string {
@@ -97,6 +106,9 @@ export function replaceSection(doc: string, id: SectionId, body: string): string
 	const { start, end } = SECTION_MARKERS[id];
 
 	if (!span) {
+		if (lines.some((line) => isMarkerLine(line, start))) {
+			throw new Error(`refusing to write the ${id} section: a start marker is present with no end marker`);
+		}
 		const out = [...lines];
 		if (out.length > 0 && out[out.length - 1].trim() !== "") out.push("");
 		out.push(start, ...inner, end);

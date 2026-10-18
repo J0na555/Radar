@@ -66,6 +66,30 @@ describe("replaceSection", () => {
 		assert.equal(after, ["# My notes", "", "Something important.", "", START, "row", END].join("\n"));
 	});
 
+	it("appends past a stray end marker, which cannot form a span on its own", () => {
+		// An end marker with no start before it is not a section, so appending a fresh pair is
+		// safe: the new start comes after the stray end, and no span crosses the user's text.
+		const after = replaceSection(["My notes", END, "Something I wrote"].join("\n"), "projects", "row");
+		assert.equal(after, ["My notes", END, "Something I wrote", "", START, "row", END].join("\n"));
+	});
+
+	it("refuses to append beside an unpaired start marker, on every write", () => {
+		// A whole-line start marker with no end marker is a half-written span. Appending a fresh
+		// pair would pair that stray start with the new end on the next read and span the user's
+		// prose, and the write after that would delete it. Both writes must be refused and the
+		// prose must survive.
+		const original = ["My notes", START, "Something I wrote", "More of my writing"].join("\n");
+		let doc = original;
+		for (const body of ["BODY", "BODY2"]) {
+			assert.throws(() => {
+				doc = replaceSection(doc, "projects", body);
+			}, /refusing to write/);
+			assert.equal(doc, original, "a refused write leaves the file as it was");
+		}
+		assert.ok(doc.includes("Something I wrote"));
+		assert.ok(doc.includes("More of my writing"));
+	});
+
 	it("appends to an empty note without a leading blank line", () => {
 		assert.equal(replaceSection("", "projects", "row"), [START, "row", END].join("\n"));
 		assert.equal(replaceSection("\n\n", "projects", "row"), [START, "row", END].join("\n"));
@@ -109,6 +133,50 @@ describe("replaceSection", () => {
 	it("allows the word pt: in ordinary prose", () => {
 		const after = replaceSection("", "projects", "the pt: prefix means nothing here");
 		assert.equal(sectionBody(after, "projects"), "the pt: prefix means nothing here");
+	});
+});
+
+describe("the weekly section", () => {
+	const WEEKLY_START = "<!-- pt:weekly:start -->";
+	const WEEKLY_END = "<!-- pt:weekly:end -->";
+
+	it("finds the weekly section by its own markers", () => {
+		assert.deepEqual(findSection(["a", WEEKLY_START, "body", WEEKLY_END, "b"], "weekly"), {
+			startLine: 1,
+			endLine: 3,
+		});
+	});
+
+	it("replaces the weekly section without disturbing the projects section", () => {
+		const both = replaceSection(replaceSection("", "projects", "row"), "weekly", "first week");
+		const after = replaceSection(both, "weekly", "second week");
+		assert.equal(sectionBody(after, "weekly"), "second week");
+		assert.equal(sectionBody(after, "projects"), "row");
+	});
+
+	it("refuses a weekly body carrying a marker", () => {
+		assert.throws(() => replaceSection("", "weekly", `row\n${MARKER_PREFIX}fake`), /refusing to write/);
+	});
+
+	it("still appends the weekly pair to a note with no weekly marker", () => {
+		const after = replaceSection("# My notes\n\nSomething important.", "weekly", "row");
+		assert.equal(
+			after,
+			["# My notes", "", "Something important.", "", WEEKLY_START, "row", WEEKLY_END].join("\n"),
+		);
+	});
+
+	it("refuses to append beside an unpaired weekly start marker, on every write", () => {
+		const original = ["My notes", WEEKLY_START, "Something I wrote", "More of my writing"].join("\n");
+		let doc = original;
+		for (const body of ["BODY", "BODY2"]) {
+			assert.throws(() => {
+				doc = replaceSection(doc, "weekly", body);
+			}, /refusing to write/);
+			assert.equal(doc, original, "a refused write leaves the file as it was");
+		}
+		assert.ok(doc.includes("Something I wrote"));
+		assert.ok(doc.includes("More of my writing"));
 	});
 });
 
